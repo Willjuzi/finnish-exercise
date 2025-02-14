@@ -5,53 +5,102 @@ let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
 
+// 使用你的 Google Sheets CSV 地址
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
 
-// 提前定义所有函数避免引用错误
+fetch(sheetURL)
+  .then(response => response.text())
+  .then(csvText => {
+    console.log("【Debug】CSV 原始数据：", csvText);
+    const results = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true
+    });
+    console.log("【Debug】PapaParse 解析结果：", results);
+    if (results.data && results.data.length > 0) {
+      console.log("【Debug】数据项键值：", Object.keys(results.data[0]));
+    }
+    // 映射数据：调用 trim() 去除两端空格
+    rawQuestions = results.data.map(row => {
+      const question = row["Question"] ? row["Question"].trim() : "";
+      const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
+      const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
+      const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
+      const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
+      const group = parseFloat(row["Group"]);
+      
+      const mapped = {
+        question: question,
+        correct: correct,
+        distractors: [distractor1, distractor2, distractor3],
+        group: group
+      };
+      console.log("【Debug】映射行：", JSON.stringify(mapped));
+      return mapped;
+    });
+    
+    updateGroupSelector();
+    updateQuestionSet();
+    showQuestion();
+  })
+  .catch(error => console.error("Error loading quiz data:", error));
+
 function updateGroupSelector() {
   const groupSelector = document.getElementById("group-selector");
-  const groups = [...new Set(rawQuestions.map(q => q.group))].sort((a, b) => a - b);
-  
-  groupSelector.innerHTML = groups.map(g => 
-    `<option value="${g}">Group ${g}</option>`
-  ).join('');
-
-  groupSelector.addEventListener("change", (e) => {
-    selectedGroup = Number(e.target.value);
+  groupSelector.innerHTML = "";
+  let uniqueGroups = [...new Set(rawQuestions.map(q => q.group))];
+  uniqueGroups.sort((a, b) => a - b);
+  uniqueGroups.forEach(groupNum => {
+    let option = document.createElement("option");
+    option.value = groupNum;
+    option.textContent = `Group ${groupNum}`;
+    groupSelector.appendChild(option);
+  });
+  groupSelector.addEventListener("change", event => {
+    selectedGroup = parseFloat(event.target.value);
     updateQuestionSet();
     showQuestion();
   });
-
-  if (groups.length > 0) {
-    selectedGroup = groups[0];
+  if (uniqueGroups.length > 0) {
+    selectedGroup = uniqueGroups[0];
     updateQuestionSet();
   }
 }
 
 function updateQuestionSet() {
-  questions = rawQuestions
-    .filter(q => q.group === selectedGroup)
-    .map(q => ({
-      ...q,
-      options: generateOptions(q.correct, q.distractors)
-    }));
-  
+  let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
+  filteredQuestions = shuffleArray(filteredQuestions);
+  // 判断题型：如果 “Correct Answer” 有内容，则视为多项选择题；否则视为填空题
+  questions = filteredQuestions.map(q => {
+    let options = [];
+    if (q.correct && q.correct.length > 0) {
+      options = generateOptions(q.correct, q.distractors);
+    } else {
+      options = []; // 填空题保持选项为空
+    }
+    return {
+      question: q.question,
+      options: options,
+      answer: q.correct,  // 多项选择题用此字段进行校对
+      ttsText: q.correct  // 用于语音朗读（可根据需要调整）
+    };
+  });
   questions = shuffleArray(questions);
   currentQuestionIndex = 0;
 }
 
 function generateOptions(correct, distractors) {
-  // 强化数据清洗
-  const validDistractors = [...new Set(distractors)]
-    .filter(d => d && d.trim() !== "" && d !== correct);
-  
-  // 自动补足选项
-  let options = [correct, ...validDistractors];
-  while (options.length < 4) {
-    options.push(`选项${options.length + 1}`); // 中文占位符
+  let options = [correct, ...distractors];
+  return shuffleArray(options);
+}
+
+function shuffleArray(array) {
+  let newArray = array.slice();
+  for (let i = newArray.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
   }
-  
-  return shuffleArray(options).slice(0, 4);
+  return newArray;
 }
 
 function showQuestion() {
@@ -59,62 +108,79 @@ function showQuestion() {
   container.innerHTML = "";
   
   if (currentQuestionIndex >= questions.length) {
-    container.innerHTML = `<div class="complete">已完成本组所有题目！</div>`;
+    alert("🎉 Practice complete! You have finished all questions in this group!");
     return;
   }
   
   const current = questions[currentQuestionIndex];
-  const labels = ["A", "B", "C", "D"];
+  console.log("【Debug】当前题目数据：", JSON.stringify(current));
   
-  container.innerHTML = `
-    <h2>${current.question}</h2>
-    <div class="options">
-      ${current.options.map((opt, i) => `
-        <button class="option-btn" onclick="checkAnswer('${opt.replace(/'/g, "\\'")}', '${current.correct.replace(/'/g, "\\'")}')">
-          ${labels[i]}. ${opt}
-        </button>
-      `).join("")}
-    </div>
-  `;
+  // 显示题目文本
+  const questionElem = document.createElement("h2");
+  questionElem.className = "question-text";
+  questionElem.textContent = current.question;
+  container.appendChild(questionElem);
+  
+  if (current.options.length === 0) {
+    // 填空题：显示文本输入框和提交按钮
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = "answer-input";
+    input.placeholder = "Type your answer here";
+    container.appendChild(input);
+    
+    const submitBtn = document.createElement("button");
+    submitBtn.textContent = "Submit Answer";
+    submitBtn.onclick = () => {
+      let userAnswer = document.getElementById("answer-input").value.trim();
+      alert("Your answer: " + userAnswer);
+      currentQuestionIndex++;
+      showQuestion();
+    };
+    container.appendChild(submitBtn);
+  } else {
+    // 多项选择题：显示答案选项按钮（标签依次为 A、B、C、D、E）
+    const labels = ["A", "B", "C", "D", "E"];
+    current.options.forEach((option, index) => {
+      const btn = document.createElement("button");
+      btn.className = "option-btn";
+      btn.dataset.value = option;
+      btn.textContent = `${labels[index]}. ${option}`;
+      btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
+      container.appendChild(btn);
+    });
+  }
 }
 
-function checkAnswer(selected, correct) {
-  const isCorrect = selected.trim() === correct.trim();
-  alert(isCorrect ? "正确！" : `错误，正确答案是：${correct}`);
-  if (isCorrect) currentQuestionIndex++;
+function checkAnswer(selected, correct, ttsText) {
+  if (selected === correct) {
+    alert("🎉 Congratulations! You got it right! Keep going! 🚀");
+  } else {
+    alert(`❌ Oops! Try again! The correct answer is: ${correct} 😉`);
+  }
+  speak(ttsText);
+}
+
+function speak(text) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "fi-FI";
+  const voices = speechSynthesis.getVoices();
+  const finnishVoice = voices.find(voice => voice.lang.toLowerCase().includes("fi"));
+  if (finnishVoice) {
+    utterance.voice = finnishVoice;
+    speechSynthesis.speak(utterance);
+  } else {
+    let audio = new Audio(`https://translate.google.com/translate_tts?ie=UTF-8&tl=fi&client=tw-ob&q=${encodeURIComponent(text)}`);
+    audio.oncanplaythrough = () => {
+      audio.play().catch(error => console.error("Audio play failed:", error));
+    };
+    audio.onerror = () => {
+      console.error("Error loading the TTS audio.");
+    };
+  }
+}
+
+document.getElementById("next-btn").addEventListener("click", () => {
+  currentQuestionIndex++;
   showQuestion();
-}
-
-function shuffleArray(arr) {
-  return arr.slice().sort(() => Math.random() - 0.5);
-}
-
-// 初始化加载
-fetch(sheetURL)
-  .then(res => res.text())
-  .then(csv => {
-    const results = Papa.parse(csv, {
-      header: true,
-      skipEmptyLines: true
-    });
-
-    rawQuestions = results.data.map(row => {
-      // 强化数据清洗
-      const distractors = [
-        row["Distractor 1"]?.trim() || "",
-        row["Distractor 2"]?.trim() || "",
-        row["Distractor 3"]?.trim() || ""
-      ].filter(d => d !== "");
-      
-      return {
-        question: row.Question?.trim() || "题目加载失败",
-        correct: row["Correct Answer"]?.trim() || "答案缺失",
-        distractors: distractors,
-        group: Number(row.Group) || 1
-      };
-    });
-
-    updateGroupSelector();
-    showQuestion();
-  })
-  .catch(err => console.error("加载失败:", err));
+});
