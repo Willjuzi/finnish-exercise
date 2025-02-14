@@ -8,134 +8,181 @@ let selectedGroup = 1;
 // 使用你的 Google Sheets CSV 地址
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
 
+// 初始化
 fetch(sheetURL)
   .then(response => response.text())
   .then(csvText => {
-    console.log("【调试】CSV 原始数据：", csvText);
     const results = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true
     });
-    console.log("【调试】PapaParse 解析结果：", results);
-    if (results.data && results.data.length > 0) {
-      console.log("【调试】数据项键值：", Object.keys(results.data[0]));
-    }
-    // 映射数据，调用 trim() 以去除两端空格
+
     rawQuestions = results.data.map(row => {
-      const question = row["Question"] ? row["Question"].trim() : "";
-      const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
-      const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
-      const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
-      const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
-      const group = parseFloat(row["Group"]);
-      
-      const mapped = {
+      // 数据清洗和验证
+      const question = (row.Question || "").trim();
+      const correct = (row["Correct Answer"] || "").trim();
+      const distractors = [
+        (row["Distractor 1"] || "").trim(),
+        (row["Distractor 2"] || "").trim(),
+        (row["Distractor 3"] || "").trim()
+      ];
+      const group = parseInt(row.Group || "1", 10);
+
+      // 数据验证
+      if (distractors.some(d => d === "")) {
+        console.warn(`空干扰项：${question}`);
+      }
+      if (new Set([correct, ...distractors]).size < 4) {
+        console.warn(`选项重复：${question}`);
+      }
+
+      return {
         question: question,
         correct: correct,
-        distractors: [distractor1, distractor2, distractor3],
+        distractors: distractors,
         group: group
       };
-      console.log("【调试】映射行：", JSON.stringify(mapped));
-      return mapped;
     });
-    
+
     updateGroupSelector();
     updateQuestionSet();
     showQuestion();
   })
-  .catch(error => console.error('Error loading quiz data:', error));
+  .catch(error => console.error('加载数据失败:', error));
 
+// 更新组别选择器
 function updateGroupSelector() {
   const groupSelector = document.getElementById("group-selector");
-  groupSelector.innerHTML = "";
-  let uniqueGroups = [...new Set(rawQuestions.map(q => q.group))];
-  uniqueGroups.sort((a, b) => a - b);
-  uniqueGroups.forEach(groupNum => {
-    let option = document.createElement("option");
-    option.value = groupNum;
-    option.textContent = `Group ${groupNum}`;
-    groupSelector.appendChild(option);
-  });
+  const uniqueGroups = [...new Set(rawQuestions.map(q => q.group))].sort((a, b) => a - b);
+  
+  groupSelector.innerHTML = uniqueGroups.map(groupNum => 
+    `<option value="${groupNum}">Group ${groupNum}</option>`
+  ).join('');
+
   groupSelector.addEventListener("change", (event) => {
-    selectedGroup = parseFloat(event.target.value);
+    selectedGroup = parseInt(event.target.value, 10);
     updateQuestionSet();
     showQuestion();
   });
+
   if (uniqueGroups.length > 0) {
     selectedGroup = uniqueGroups[0];
     updateQuestionSet();
   }
 }
 
+// 生成题目集
 function updateQuestionSet() {
-  let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
-  filteredQuestions = shuffleArray(filteredQuestions);
-  // 对每个题目，根据是否有正确答案来判断题型：
-  questions = filteredQuestions.map(q => {
-    let options = [];
-    // 如果“Correct Answer”有内容，则视为多项选择题
-    if (q.correct && q.correct.length > 0) {
-      options = generateOptions(q.correct, q.distractors);
-    }
-    // 否则视为填空题（选项数组保持为空）
-    return {
-      question: q.question,
-      options: options,
-      answer: q.correct,  // 多项选择题用此字段来校对答案
-      ttsText: q.correct  // 语音朗读使用，可根据需要调整
-    };
-  });
-  questions = shuffleArray(questions);
+  const filteredQuestions = rawQuestions
+    .filter(q => q.group === selectedGroup)
+    .map(q => ({
+      ...q,
+      options: generateOptions(q.correct, q.distractors)
+    }));
+
+  questions = shuffleArray(filteredQuestions);
   currentQuestionIndex = 0;
 }
 
+// 生成选项（带数据校验）
 function generateOptions(correct, distractors) {
-  let options = [correct, ...distractors];
-  return shuffleArray(options);
-}
+  const validDistractors = [...new Set(distractors  // 去重
+    .map(d => d.trim())                            // 去除空格
+    .filter(d => d !== "")                         // 过滤空值
+    .filter(d => d !== correct))];                // 排除与正确答案重复
 
-function shuffleArray(array) {
-  let newArray = array.slice();
-  for (let i = newArray.length - 1; i > 0; i--) {
-    let j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  // 合并选项并补足数量
+  let options = [correct, ...validDistractors];
+  while (options.length < 4) {
+    options.push(correct); // 用正确答案补足选项
   }
-  return newArray;
+
+  return shuffleArray(options).slice(0, 4);
 }
 
+// 显示题目
 function showQuestion() {
   const container = document.getElementById('question-container');
   container.innerHTML = "";
-  
+
   if (currentQuestionIndex >= questions.length) {
-    alert("🎉 Practice complete! You have finished all questions in this group!");
+    container.innerHTML = `<div class="completed-message">🎉 本组练习已完成！</div>`;
     return;
   }
-  
+
   const current = questions[currentQuestionIndex];
-  console.log("【调试】当前题目数据：", JSON.stringify(current));
-  
-  // 显示题目文本
-  const questionElem = document.createElement('h2');
-  questionElem.className = "question-text";
-  questionElem.textContent = current.question;
-  container.appendChild(questionElem);
-  
-  if (current.options.length === 0) {
-    // 填空题：显示一个文本输入框和提交按钮
-    const input = document.createElement('input');
-    input.type = "text";
-    input.id = "answer-input";
-    input.placeholder = "Type your answer here";
-    container.appendChild(input);
-    
-    const submitBtn = document.createElement('button');
-    submitBtn.textContent = "Submit Answer";
-    submitBtn.onclick = () => {
-      let userAnswer = document.getElementById("answer-input").value.trim();
-      // 可在此添加比对逻辑，如与正确答案比较（此处仅显示提交的答案）
-      alert("Your answer: " + userAnswer);
-      currentQuestionIndex++;
-      showQuestion();
-    };
-    container.append
+  const labels = ['A', 'B', 'C', 'D'];
+
+  // 题目显示
+  container.innerHTML = `
+    <h2 class="question-text">${current.question}</h2>
+    <div class="options-container">
+      ${current.options.map((option, index) => `
+        <button class="option-btn" 
+                data-value="${option}" 
+                onclick="checkAnswer('${option}', '${current.correct}', '${current.correct}')">
+          ${labels[index]}. ${option}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+// 检查答案
+function checkAnswer(selected, correct, ttsText) {
+  const correctAnswer = correct.trim();
+  const selectedAnswer = selected.trim();
+
+  const resultMessage = selectedAnswer === correctAnswer 
+    ? `🎉 正确！正确答案是：${correctAnswer}` 
+    : `❌ 错误。正确答案是：${correctAnswer}`;
+
+  // 显示浮动提示
+  const floatingMessage = document.createElement('div');
+  floatingMessage.className = `floating-message ${selectedAnswer === correctAnswer ? 'correct' : 'wrong'}`;
+  floatingMessage.textContent = resultMessage;
+  document.body.appendChild(floatingMessage);
+
+  // 自动消失效果
+  setTimeout(() => {
+    floatingMessage.remove();
+  }, 2000);
+
+  speak(ttsText);
+}
+
+// 语音功能
+function speak(text) {
+  if (!text) return;
+
+  if ('speechSynthesis' in window) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'fi-FI';
+    const finnishVoice = speechSynthesis.getVoices().find(v => v.lang === 'fi-FI');
+    if (finnishVoice) utterance.voice = finnishVoice;
+    speechSynthesis.speak(utterance);
+  } else {
+    const audio = new Audio(
+      `https://translate.google.com/translate_tts?ie=UTF-8&tl=fi&client=tw-ob&q=${encodeURIComponent(text)}`
+    );
+    audio.play().catch(error => console.error('语音播放失败:', error));
+  }
+}
+
+// 工具函数
+function shuffleArray(array) {
+  return array.slice().sort(() => Math.random() - 0.5);
+}
+
+// 下一题按钮
+document.getElementById('next-btn').addEventListener('click', () => {
+  currentQuestionIndex = Math.min(currentQuestionIndex + 1, questions.length);
+  showQuestion();
+});
+
+// 重置按钮
+document.getElementById('reset-btn').addEventListener('click', () => {
+  currentQuestionIndex = 0;
+  questions = shuffleArray(questions);
+  showQuestion();
+});
