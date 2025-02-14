@@ -5,29 +5,39 @@ let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
 
-// 使用你提供的 Google Sheets CSV 地址
+// 使用你的 Google Sheets CSV 地址
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
 
-// 从 Google Sheets 获取 CSV 数据，并使用 PapaParse 转换成 JSON
 fetch(sheetURL)
   .then(response => response.text())
   .then(csvText => {
-    console.log("CSV 数据：", csvText);  // 调试日志：查看原始 CSV 数据
+    console.log("CSV 数据：", csvText);  // 查看原始 CSV 数据
     const results = Papa.parse(csvText, {
-      header: true,       // 第一行作为表头
+      header: true,
       skipEmptyLines: true
     });
-    console.log("解析结果：", results);  // 调试日志：查看解析后的结果
+    console.log("解析结果：", results);  // 查看 PapaParse 解析后的结果
 
-    // 根据你的 Google Sheet 表头名称更新映射
-    // 表头为：Question, Correct Answer, Distractor 1, Distractor 2, Distractor 3, Group
+    // 如果有数据，打印第一行的键，确认表头名称
+    if (results.data && results.data.length > 0) {
+      console.log("表头键值：", Object.keys(results.data[0]));
+    }
+
+    // 根据你的 Google Sheet 表头映射数据（这里已加入 trim() 处理）
+    // 表头应为：Question, Correct Answer, Distractor 1, Distractor 2, Distractor 3, Group
     rawQuestions = results.data.map(row => ({
-      question: row["Question"],
-      correct: row["Correct Answer"],
-      distractors: [row["Distractor 1"], row["Distractor 2"], row["Distractor 3"]],
+      question: row["Question"] ? row["Question"].trim() : "",
+      correct: row["Correct Answer"] ? row["Correct Answer"].trim() : "",
+      distractors: [
+        row["Distractor 1"] ? row["Distractor 1"].trim() : "",
+        row["Distractor 2"] ? row["Distractor 2"].trim() : "",
+        row["Distractor 3"] ? row["Distractor 3"].trim() : ""
+      ],
       group: parseInt(row["Group"], 10)
     }));
-    
+
+    console.log("映射后的题库数据：", rawQuestions);  // 调试日志：映射后的数据
+
     updateGroupSelector();
     updateQuestionSet();
     showQuestion();
@@ -61,7 +71,7 @@ function updateGroupSelector() {
   }
 }
 
-// 根据选定的组别更新题库
+// 根据选定组别更新题库
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
@@ -73,7 +83,7 @@ function updateQuestionSet() {
       question: q.question,
       options: options,
       answer: q.correct,
-      ttsText: q.correct  // 可根据需要调整语音播报文本
+      ttsText: q.correct  // 这里使用正确答案进行朗读
     };
   });
 
@@ -81,7 +91,7 @@ function updateQuestionSet() {
   currentQuestionIndex = 0;
 }
 
-// 生成答案选项：合并正确答案与干扰项，然后随机打乱顺序
+// 合并正确答案与干扰项，并随机排列
 function generateOptions(correct, distractors) {
   let options = [correct, ...distractors];
   return shuffleArray(options);
@@ -97,7 +107,7 @@ function shuffleArray(array) {
   return newArray;
 }
 
-// 显示当前题目及其答案选项
+// 显示当前题目和选项
 function showQuestion() {
   const container = document.getElementById('question-container');
   container.innerHTML = '';
@@ -108,6 +118,7 @@ function showQuestion() {
   }
 
   const current = questions[currentQuestionIndex];
+  console.log("当前题目数据：", current);  // 调试日志：当前题目的详细数据
 
   // 显示题目文本
   const questionElem = document.createElement('h2');
@@ -117,11 +128,9 @@ function showQuestion() {
 
   // 定义选项前缀标签 A, B, C, D
   const labels = ['A', 'B', 'C', 'D'];
-
   current.options.forEach((option, index) => {
     const btn = document.createElement('button');
     btn.className = "option-btn";
-    // 保存答案选项到 data-value 属性
     btn.dataset.value = option;
     btn.textContent = `${labels[index]}. ${option}`;
     btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
@@ -129,7 +138,7 @@ function showQuestion() {
   });
 }
 
-// 检查用户选择的答案并给予反馈
+// 检查答案是否正确
 function checkAnswer(selected, correct, ttsText) {
   if (selected === correct) {
     alert("🎉 Congratulations! You got it right! Keep going! 🚀");
@@ -139,14 +148,13 @@ function checkAnswer(selected, correct, ttsText) {
   speak(ttsText);
 }
 
-// 使用 Web Speech API 朗读文本，若未找到芬兰语发音则回退使用 Google Translate TTS
+// 使用 Web Speech API 朗读文本，若失败则使用 Google Translate TTS
 function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'fi-FI';
-
   const voices = speechSynthesis.getVoices();
   const finnishVoice = voices.find(voice => voice.lang.toLowerCase().includes('fi'));
-  
+
   if (finnishVoice) {
     utterance.voice = finnishVoice;
     speechSynthesis.speak(utterance);
