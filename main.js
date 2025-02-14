@@ -12,17 +12,19 @@ const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUl
 fetch(sheetURL)
   .then(response => response.text())
   .then(csvText => {
-    // 使用 PapaParse 解析 CSV
+    console.log("CSV 数据：", csvText);  // 调试日志：查看原始 CSV 数据
     const results = Papa.parse(csvText, {
-      header: true,       // 第一行作为表头（请确保你的 Google Sheet 中表头名称与下面的字段匹配）
+      header: true,       // 第一行作为表头
       skipEmptyLines: true
     });
-    
-    // 假设你的表头名称分别是：Question, Correct, Distractor1, Distractor2, Distractor3, Group
+    console.log("解析结果：", results);  // 调试日志：查看解析后的结果
+
+    // 根据你的 Google Sheet 表头名称更新映射
+    // 表头为：Question, Correct Answer, Distractor 1, Distractor 2, Distractor 3, Group
     rawQuestions = results.data.map(row => ({
       question: row["Question"],
-      correct: row["Correct"],
-      distractors: [row["Distractor1"], row["Distractor2"], row["Distractor3"]],
+      correct: row["Correct Answer"],
+      distractors: [row["Distractor 1"], row["Distractor 2"], row["Distractor 3"]],
       group: parseInt(row["Group"], 10)
     }));
     
@@ -71,7 +73,7 @@ function updateQuestionSet() {
       question: q.question,
       options: options,
       answer: q.correct,
-      ttsText: q.correct  // 可根据需要调整语音播报的文本
+      ttsText: q.correct  // 可根据需要调整语音播报文本
     };
   });
 
@@ -119,7 +121,7 @@ function showQuestion() {
   current.options.forEach((option, index) => {
     const btn = document.createElement('button');
     btn.className = "option-btn";
-    // 将答案选项存入 data-value 属性，便于后续比对
+    // 保存答案选项到 data-value 属性
     btn.dataset.value = option;
     btn.textContent = `${labels[index]}. ${option}`;
     btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
