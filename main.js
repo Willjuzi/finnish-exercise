@@ -4,38 +4,24 @@ let rawQuestions = [];
 let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
+let verbOptionsDict = {};  // 用于保存每个动词对应的选项数组
 
-// 只保留正确答案非空的题目，确保所有题目都是多项选择题
-function filterMultipleChoice(rows) {
-  return rows.filter(row => row.correct && row.correct.trim().length > 0);
-}
-
-function generateOptions(correct, distractors) {
-  let options = [correct, ...distractors];
-  return shuffleArray(options);
-}
-
-function shuffleArray(array) {
-  let newArray = array.slice();
-  for (let i = newArray.length - 1; i > 0; i--) {
-    let j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+// 修改后的 getVerb 函数
+// 注意前缀后加一个空格，确保正确提取动词
+function getVerb(text) {
+  const prefix = "Minkä tyyppinen verbi on ";
+  if (text.startsWith(prefix)) {
+    let remainder = text.substring(prefix.length).trim();
+    let parenIndex = remainder.indexOf("(");
+    if (parenIndex !== -1) {
+      remainder = remainder.substring(0, parenIndex).trim();
+    }
+    remainder = remainder.replace(/[?.,!]/g, "").trim();
+    return remainder;
   }
-  return newArray;
-}
-
-// 将 CSV 数据映射为对象，并去除两端空格
-function mapRow(row) {
-  return {
-    question: row["Question"] ? row["Question"].trim() : "",
-    correct: row["Correct Answer"] ? row["Correct Answer"].trim() : "",
-    distractors: [
-      row["Distractor 1"] ? row["Distractor 1"].trim() : "",
-      row["Distractor 2"] ? row["Distractor 2"].trim() : "",
-      row["Distractor 3"] ? row["Distractor 3"].trim() : ""
-    ],
-    group: parseFloat(row["Group"])
-  };
+  // 如果不以该前缀开头，则尝试从第一个括号中提取
+  let match = text.match(/\(([^)]+)\)/);
+  return match ? match[1].trim() : "";
 }
 
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
@@ -52,14 +38,39 @@ fetch(sheetURL)
     if (results.data && results.data.length > 0) {
       console.log("【Debug】数据项键值：", Object.keys(results.data[0]));
     }
-    // 映射所有数据行
-    rawQuestions = results.data.map(mapRow);
-    // 只保留多项选择题（即正确答案非空）
-    rawQuestions = filterMultipleChoice(rawQuestions);
-    rawQuestions.forEach(row => console.log("【Debug】映射行：", JSON.stringify(row)));
+    // 映射数据：去除两端空格
+    rawQuestions = results.data.map(row => {
+      const question = row["Question"] ? row["Question"].trim() : "";
+      const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
+      const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
+      const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
+      const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
+      const group = parseFloat(row["Group"]);
+      
+      const mapped = {
+        question: question,
+        correct: correct,
+        distractors: [distractor1, distractor2, distractor3],
+        group: group
+      };
+      console.log("【Debug】映射行：", JSON.stringify(mapped));
+      return mapped;
+    });
+    
+    // 建立动词与选项的字典：仅对那些"Correct Answer"有内容的行建立映射
+    rawQuestions.forEach(row => {
+      if (row.correct && row.correct.length > 0) {
+        let verb = getVerb(row.question);
+        if (verb) {
+          verbOptionsDict[verb] = [row.correct, ...row.distractors];
+        }
+      }
+    });
+    console.log("【Debug】Verb Options Dictionary:", JSON.stringify(verbOptionsDict));
     
     updateGroupSelector();
     updateQuestionSet();
+    // 不再过滤掉选项为空的题目——通过字典补全后，应该都有选项
     showQuestion();
   })
   .catch(error => console.error("Error loading quiz data:", error));
@@ -89,18 +100,47 @@ function updateGroupSelector() {
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
-  // 对每个题目生成多项选择题（直接使用该行的正确答案和干扰项）
+  // 生成每道题目的多项选择题
   questions = filteredQuestions.map(q => {
-    let options = generateOptions(q.correct, q.distractors);
+    let options = [];
+    let answer = q.correct;
+    if (q.correct && q.correct.length > 0) {
+      // 本行已有正确答案（通常为数字题）
+      options = generateOptions(q.correct, q.distractors);
+    } else {
+      // 本行答案为空（即单词题），尝试通过字典补全
+      let verb = getVerb(q.question);
+      if (verb && verbOptionsDict[verb]) {
+        options = generateOptions(verbOptionsDict[verb][0], verbOptionsDict[verb].slice(1));
+        answer = verbOptionsDict[verb][0];
+      } else {
+        // 如果找不到，则保留空数组（理论上不应出现）
+        options = [];
+      }
+    }
     return {
       question: q.question,
       options: options,
-      answer: q.correct,
-      ttsText: q.correct
+      answer: answer,
+      ttsText: answer
     };
   });
   questions = shuffleArray(questions);
   currentQuestionIndex = 0;
+}
+
+function generateOptions(correct, distractors) {
+  let options = [correct, ...distractors];
+  return shuffleArray(options);
+}
+
+function shuffleArray(array) {
+  let newArray = array.slice();
+  for (let i = newArray.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
 }
 
 function showQuestion() {
