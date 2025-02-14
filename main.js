@@ -4,10 +4,24 @@ let rawQuestions = [];
 let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
-let verbOptionsDict = {};  // 用来保存每个动词对应的选项数组
+let verbOptionsDict = {};  // 用于保存每个动词对应的选项数组
 
-// 从题目文本中提取动词：提取第一个括号内的内容
-function extractVerb(text) {
+// 从题目中提取动词。
+// 如果题目以 "Minkä tyyppinen verbi on" 开头，则提取该短语后第一个单词（去除问号和括号部分）。
+function getVerb(text) {
+  const prefix = "Minkä tyyppinen verbi on";
+  if (text.startsWith(prefix)) {
+    let remainder = text.substring(prefix.length).trim();
+    // 如果存在 "(" 则只取其前面的部分
+    let parenIndex = remainder.indexOf("(");
+    if (parenIndex !== -1) {
+      remainder = remainder.substring(0, parenIndex).trim();
+    }
+    // 去除末尾问号及其他标点
+    remainder = remainder.replace(/[?.,!]/g, "").trim();
+    return remainder;
+  }
+  // 否则，尝试从括号中提取
   let match = text.match(/\(([^)]+)\)/);
   return match ? match[1].trim() : "";
 }
@@ -26,7 +40,7 @@ fetch(sheetURL)
     if (results.data && results.data.length > 0) {
       console.log("【Debug】数据项键值：", Object.keys(results.data[0]));
     }
-    // 映射数据，去除两端空格
+    // 映射数据：去除两端空格
     rawQuestions = results.data.map(row => {
       const question = row["Question"] ? row["Question"].trim() : "";
       const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
@@ -45,19 +59,21 @@ fetch(sheetURL)
       return mapped;
     });
     
-    // 建立动词与选项的字典：对那些“Correct Answer”有内容的行建立映射
+    // 建立动词与选项的字典：仅对那些“Correct Answer”有内容的行进行映射
     rawQuestions.forEach(row => {
-      let verb = extractVerb(row.question);
-      if (verb && row.correct) {
-        // 保存原始顺序的选项数组（正确答案在第一位）
-        verbOptionsDict[verb] = [row.correct, ...row.distractors];
+      if (row.correct && row.correct.length > 0) {
+        let verb = getVerb(row.question);
+        if (verb) {
+          // 保存原始顺序的选项数组（正确答案在第一位）
+          verbOptionsDict[verb] = [row.correct, ...row.distractors];
+        }
       }
     });
     console.log("【Debug】Verb Options Dictionary:", JSON.stringify(verbOptionsDict));
     
     updateGroupSelector();
     updateQuestionSet();
-    // 过滤掉没有补全选项的题目，保证所有题目均为多项选择题
+    // 过滤掉没有补全选项的题目（确保所有题目都是多项选择题）
     questions = questions.filter(q => q.options && q.options.length > 0);
     showQuestion();
   })
@@ -93,20 +109,19 @@ function updateQuestionSet() {
   questions = filteredQuestions.map(q => {
     let options = [];
     let answer = q.correct;
-    // 如果该行有正确答案，则直接生成选项
     if (q.correct && q.correct.length > 0) {
-       options = generateOptions(q.correct, q.distractors);
+      // 当前行本身是多项选择题
+      options = generateOptions(q.correct, q.distractors);
     } else {
-       // 如果当前行的选项为空，则尝试从字典中查找对应动词的选项
-       let verb = extractVerb(q.question);
-       if (verb && verbOptionsDict[verb]) {
-           let storedOptions = verbOptionsDict[verb];
-           options = generateOptions(storedOptions[0], storedOptions.slice(1));
-           answer = storedOptions[0];
-       } else {
-           // 没有找到补全选项的情况，此题将返回空选项
-           options = [];
-       }
+      // 当前行选项为空，尝试从字典中查找对应动词的选项
+      let verb = getVerb(q.question);
+      if (verb && verbOptionsDict[verb]) {
+        let storedOptions = verbOptionsDict[verb];
+        options = generateOptions(storedOptions[0], storedOptions.slice(1));
+        answer = storedOptions[0];
+      } else {
+        options = [];
+      }
     }
     return {
       question: q.question,
