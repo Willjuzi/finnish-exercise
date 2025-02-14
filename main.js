@@ -4,8 +4,14 @@ let rawQuestions = [];
 let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
+let verbOptionsDict = {};  // 用来保存每个动词对应的选项数组
 
-// Google Sheets CSV 地址（确保已公开发布）
+// 提取题目中的动词（从第一个括号中提取）
+function extractVerb(text) {
+  let match = text.match(/\(([^)]+)\)/);
+  return match ? match[1].trim() : "";
+}
+
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
 
 fetch(sheetURL)
@@ -20,14 +26,14 @@ fetch(sheetURL)
     if (results.data && results.data.length > 0) {
       console.log("【Debug】数据项键值：", Object.keys(results.data[0]));
     }
-    // 映射数据（去除两端空格）
+    // 映射数据，去除两端空格
     rawQuestions = results.data.map(row => {
       const question = row["Question"] ? row["Question"].trim() : "";
       const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
       const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
       const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
       const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
-      const group = parseFloat(row["Group"]);  // 保留小数部分
+      const group = parseFloat(row["Group"]);
       
       const mapped = {
         question: question,
@@ -38,6 +44,16 @@ fetch(sheetURL)
       console.log("【Debug】映射行：", JSON.stringify(mapped));
       return mapped;
     });
+    
+    // 建立动词与选项的字典：只对那些“Correct Answer”有内容的行建立映射
+    rawQuestions.forEach(row => {
+      let verb = extractVerb(row.question);
+      if (verb && row.correct) {
+        // 保存原始顺序的选项数组（未打乱）：正确答案放在第一位
+        verbOptionsDict[verb] = [row.correct, ...row.distractors];
+      }
+    });
+    console.log("【Debug】Verb Options Dictionary:", JSON.stringify(verbOptionsDict));
     
     updateGroupSelector();
     updateQuestionSet();
@@ -70,19 +86,29 @@ function updateGroupSelector() {
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
-  // 判断题型：如果“Correct Answer”有内容，则为多项选择题；否则为填空题
+  // 对每个题目都生成多项选择题
   questions = filteredQuestions.map(q => {
     let options = [];
+    let answer = q.correct;
+    // 如果当前行有正确答案，则直接生成选项
     if (q.correct && q.correct.length > 0) {
-      options = generateOptions(q.correct, q.distractors);
+       options = generateOptions(q.correct, q.distractors);
     } else {
-      options = []; // 填空题
+       // 如果当前行选项为空，则尝试从字典中查找对应动词的选项
+       let verb = extractVerb(q.question);
+       if (verb && verbOptionsDict[verb]) {
+           let storedOptions = verbOptionsDict[verb];
+           options = generateOptions(storedOptions[0], storedOptions.slice(1));
+           answer = storedOptions[0];
+       } else {
+           options = []; // 如果找不到，则保持为空（理论上不应出现这种情况）
+       }
     }
     return {
       question: q.question,
       options: options,
-      answer: q.correct,  // 多项选择题用于校对答案
-      ttsText: q.correct  // 用于语音朗读（可根据需要调整）
+      answer: answer,
+      ttsText: answer
     };
   });
   questions = shuffleArray(questions);
@@ -121,35 +147,16 @@ function showQuestion() {
   questionElem.textContent = current.question;
   container.appendChild(questionElem);
   
-  if (current.options.length === 0) {
-    // 填空题：显示文本输入框和提交按钮
-    const input = document.createElement("input");
-    input.type = "text";
-    input.id = "answer-input";
-    input.placeholder = "Type your answer here";
-    container.appendChild(input);
-    
-    const submitBtn = document.createElement("button");
-    submitBtn.textContent = "Submit Answer";
-    submitBtn.onclick = () => {
-      let userAnswer = document.getElementById("answer-input").value.trim();
-      alert("Your answer: " + userAnswer);
-      currentQuestionIndex++;
-      showQuestion();
-    };
-    container.appendChild(submitBtn);
-  } else {
-    // 多项选择题：显示选项按钮（标签依次为 A、B、C、D、E）
-    const labels = ["A", "B", "C", "D", "E"];
-    current.options.forEach((option, index) => {
-      const btn = document.createElement("button");
-      btn.className = "option-btn";
-      btn.dataset.value = option;
-      btn.textContent = `${labels[index]}. ${option}`;
-      btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
-      container.appendChild(btn);
-    });
-  }
+  // 显示多项选择题选项
+  const labels = ["A", "B", "C", "D", "E"];
+  current.options.forEach((option, index) => {
+    const btn = document.createElement("button");
+    btn.className = "option-btn";
+    btn.dataset.value = option;
+    btn.textContent = `${labels[index]}. ${option}`;
+    btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
+    container.appendChild(btn);
+  });
 }
 
 function checkAnswer(selected, correct, ttsText) {
