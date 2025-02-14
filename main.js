@@ -5,7 +5,7 @@ let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
 
-// 使用你的 Google Sheets CSV 地址
+// Google Sheets CSV 地址（确保已公开发布）
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
 
 fetch(sheetURL)
@@ -20,14 +20,14 @@ fetch(sheetURL)
     if (results.data && results.data.length > 0) {
       console.log("【Debug】数据项键值：", Object.keys(results.data[0]));
     }
-    // 映射数据：调用 trim() 去除两端空格
+    // 映射数据（去除两端空格）
     rawQuestions = results.data.map(row => {
       const question = row["Question"] ? row["Question"].trim() : "";
       const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
       const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
       const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
       const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
-      const group = parseFloat(row["Group"]);
+      const group = parseFloat(row["Group"]);  // 保留小数部分
       
       const mapped = {
         question: question,
@@ -70,18 +70,18 @@ function updateGroupSelector() {
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
-  // 判断题型：如果 “Correct Answer” 有内容，则视为多项选择题；否则视为填空题
+  // 判断题型：如果“Correct Answer”有内容，则为多项选择题；否则为填空题
   questions = filteredQuestions.map(q => {
     let options = [];
     if (q.correct && q.correct.length > 0) {
       options = generateOptions(q.correct, q.distractors);
     } else {
-      options = []; // 填空题保持选项为空
+      options = []; // 填空题
     }
     return {
       question: q.question,
       options: options,
-      answer: q.correct,  // 多项选择题用此字段进行校对
+      answer: q.correct,  // 多项选择题用于校对答案
       ttsText: q.correct  // 用于语音朗读（可根据需要调整）
     };
   });
@@ -139,7 +139,7 @@ function showQuestion() {
     };
     container.appendChild(submitBtn);
   } else {
-    // 多项选择题：显示答案选项按钮（标签依次为 A、B、C、D、E）
+    // 多项选择题：显示选项按钮（标签依次为 A、B、C、D、E）
     const labels = ["A", "B", "C", "D", "E"];
     current.options.forEach((option, index) => {
       const btn = document.createElement("button");
