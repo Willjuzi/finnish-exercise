@@ -4,81 +4,56 @@ let rawQuestions = [];
 let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
-let verbOptionsDict = {};  // 用于保存每个动词对应的选项数组
 
-// 从题目中提取动词。
-// 如果题目以 "Minkä tyyppinen verbi on" 开头，则提取该短语后第一个单词（去除问号和括号部分）。
-function getVerb(text) {
-  const prefix = "Minkä tyyppinen verbi on";
-  if (text.startsWith(prefix)) {
-    let remainder = text.substring(prefix.length).trim();
-    // 如果存在 "(" 则只取其前面的部分
-    let parenIndex = remainder.indexOf("(");
-    if (parenIndex !== -1) {
-      remainder = remainder.substring(0, parenIndex).trim();
-    }
-    // 去除末尾问号及其他标点
-    remainder = remainder.replace(/[?.,!]/g, "").trim();
-    return remainder;
-  }
-  // 否则，尝试从括号中提取
-  let match = text.match(/\(([^)]+)\)/);
-  return match ? match[1].trim() : "";
-}
-
+// 使用你的 Google Sheets CSV 地址
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
 
 fetch(sheetURL)
   .then(response => response.text())
   .then(csvText => {
-    console.log("【Debug】CSV 原始数据：", csvText);
+    console.log("【调试】CSV 原始数据：", csvText);  // 查看原始 CSV 数据
     const results = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true
     });
-    console.log("【Debug】PapaParse 解析结果：", results);
+    console.log("【调试】PapaParse 解析结果：", results);
+
+    // 如果有数据，打印第一个数据项的键，确认表头名称
     if (results.data && results.data.length > 0) {
-      console.log("【Debug】数据项键值：", Object.keys(results.data[0]));
+      console.log("【调试】数据项键值：", Object.keys(results.data[0]));
     }
-    // 映射数据：去除两端空格
+
+    // 映射数据（对每个值调用 trim()）
     rawQuestions = results.data.map(row => {
       const question = row["Question"] ? row["Question"].trim() : "";
       const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
       const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
       const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
       const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
-      const group = parseFloat(row["Group"]);
-      
-      const mapped = {
+      const group = parseInt(row["Group"], 10);
+
+      // 打印每一行的映射结果，便于调试
+      console.log("【调试】映射行：", {
+        question, correct,
+        distractors: [distractor1, distractor2, distractor3],
+        group
+      });
+
+      return {
         question: question,
         correct: correct,
         distractors: [distractor1, distractor2, distractor3],
         group: group
       };
-      console.log("【Debug】映射行：", JSON.stringify(mapped));
-      return mapped;
     });
-    
-    // 建立动词与选项的字典：仅对那些“Correct Answer”有内容的行进行映射
-    rawQuestions.forEach(row => {
-      if (row.correct && row.correct.length > 0) {
-        let verb = getVerb(row.question);
-        if (verb) {
-          // 保存原始顺序的选项数组（正确答案在第一位）
-          verbOptionsDict[verb] = [row.correct, ...row.distractors];
-        }
-      }
-    });
-    console.log("【Debug】Verb Options Dictionary:", JSON.stringify(verbOptionsDict));
-    
+
     updateGroupSelector();
     updateQuestionSet();
-    // 过滤掉没有补全选项的题目（确保所有题目都是多项选择题）
-    questions = questions.filter(q => q.options && q.options.length > 0);
     showQuestion();
   })
-  .catch(error => console.error("Error loading quiz data:", error));
+  .catch(error => console.error('Error loading quiz data:', error));
 
+// 更新组别选择框
 function updateGroupSelector() {
   const groupSelector = document.getElementById("group-selector");
   groupSelector.innerHTML = "";
@@ -90,10 +65,9 @@ function updateGroupSelector() {
     option.textContent = `Group ${groupNum}`;
     groupSelector.appendChild(option);
   });
-  groupSelector.addEventListener("change", event => {
-    selectedGroup = parseFloat(event.target.value);
+  groupSelector.addEventListener("change", (event) => {
+    selectedGroup = parseInt(event.target.value, 10);
     updateQuestionSet();
-    questions = questions.filter(q => q.options && q.options.length > 0);
     showQuestion();
   });
   if (uniqueGroups.length > 0) {
@@ -102,43 +76,31 @@ function updateGroupSelector() {
   }
 }
 
+// 根据当前选定的组别生成题库
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
-  // 对每个题目生成多项选择题
+  // 为每个题目生成随机排列的答案选项
   questions = filteredQuestions.map(q => {
-    let options = [];
-    let answer = q.correct;
-    if (q.correct && q.correct.length > 0) {
-      // 当前行本身是多项选择题
-      options = generateOptions(q.correct, q.distractors);
-    } else {
-      // 当前行选项为空，尝试从字典中查找对应动词的选项
-      let verb = getVerb(q.question);
-      if (verb && verbOptionsDict[verb]) {
-        let storedOptions = verbOptionsDict[verb];
-        options = generateOptions(storedOptions[0], storedOptions.slice(1));
-        answer = storedOptions[0];
-      } else {
-        options = [];
-      }
-    }
+    let options = generateOptions(q.correct, q.distractors);
     return {
       question: q.question,
       options: options,
-      answer: answer,
-      ttsText: answer
+      answer: q.correct,
+      ttsText: q.correct
     };
   });
   questions = shuffleArray(questions);
   currentQuestionIndex = 0;
 }
 
+// 合并正确答案与干扰项，并随机排列
 function generateOptions(correct, distractors) {
   let options = [correct, ...distractors];
   return shuffleArray(options);
 }
 
+// 随机打乱数组
 function shuffleArray(array) {
   let newArray = array.slice();
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -148,28 +110,25 @@ function shuffleArray(array) {
   return newArray;
 }
 
+// 显示当前题目和选项
 function showQuestion() {
-  const container = document.getElementById("question-container");
+  const container = document.getElementById('question-container');
   container.innerHTML = "";
-  
   if (currentQuestionIndex >= questions.length) {
     alert("🎉 Practice complete! You have finished all questions in this group!");
     return;
   }
-  
   const current = questions[currentQuestionIndex];
-  console.log("【Debug】当前题目数据：", JSON.stringify(current));
-  
+  console.log("【调试】当前题目数据：", current);
   // 显示题目文本
-  const questionElem = document.createElement("h2");
+  const questionElem = document.createElement('h2');
   questionElem.className = "question-text";
   questionElem.textContent = current.question;
   container.appendChild(questionElem);
-  
-  // 显示多项选择题选项（标签依次为 A、B、C、D、E）
-  const labels = ["A", "B", "C", "D", "E"];
+  // 定义选项前缀
+  const labels = ['A', 'B', 'C', 'D'];
   current.options.forEach((option, index) => {
-    const btn = document.createElement("button");
+    const btn = document.createElement('button');
     btn.className = "option-btn";
     btn.dataset.value = option;
     btn.textContent = `${labels[index]}. ${option}`;
@@ -178,6 +137,7 @@ function showQuestion() {
   });
 }
 
+// 检查答案
 function checkAnswer(selected, correct, ttsText) {
   if (selected === correct) {
     alert("🎉 Congratulations! You got it right! Keep going! 🚀");
@@ -187,11 +147,12 @@ function checkAnswer(selected, correct, ttsText) {
   speak(ttsText);
 }
 
+// 朗读文本（使用 Web Speech API，如果失败则使用 Google Translate TTS）
 function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "fi-FI";
+  utterance.lang = 'fi-FI';
   const voices = speechSynthesis.getVoices();
-  const finnishVoice = voices.find(voice => voice.lang.toLowerCase().includes("fi"));
+  const finnishVoice = voices.find(voice => voice.lang.toLowerCase().includes('fi'));
   if (finnishVoice) {
     utterance.voice = finnishVoice;
     speechSynthesis.speak(utterance);
@@ -206,7 +167,8 @@ function speak(text) {
   }
 }
 
-document.getElementById("next-btn").addEventListener("click", () => {
+// “Next” 按钮点击事件
+document.getElementById('next-btn').addEventListener('click', () => {
   currentQuestionIndex++;
   showQuestion();
 });
