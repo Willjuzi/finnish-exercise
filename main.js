@@ -20,26 +20,23 @@ fetch(sheetURL)
     if (results.data && results.data.length > 0) {
       console.log("【调试】数据项键值：", Object.keys(results.data[0]));
     }
-    // 映射数据（调用 trim() 以去除空格）
+    // 映射数据（调用 trim() 以去除空格），并用 JSON.stringify 输出完整数据
     rawQuestions = results.data.map(row => {
       const question = row["Question"] ? row["Question"].trim() : "";
       const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
       const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
       const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
       const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
-      const group = parseFloat(row["Group"]);  // 保留小数部分
-      console.log("【调试】映射行：", { 
-        question, 
-        correct, 
-        distractors: [distractor1, distractor2, distractor3], 
-        group 
-      });
-      return { 
-        question: question, 
-        correct: correct, 
-        distractors: [distractor1, distractor2, distractor3], 
-        group: group 
+      const group = parseFloat(row["Group"]);
+      
+      const mapped = {
+        question: question,
+        correct: correct,
+        distractors: [distractor1, distractor2, distractor3],
+        group: group
       };
+      console.log("【调试】映射行：", JSON.stringify(mapped));
+      return mapped;
     });
     
     updateGroupSelector();
@@ -73,20 +70,19 @@ function updateGroupSelector() {
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
-  // 对于每个题目，根据答案内容判断题型
+  // 根据答案内容判断题型：如果正确答案和所有干扰项都为空，则视为填空题
   questions = filteredQuestions.map(q => {
-    // 如果正确答案和所有干扰项都为空，则视为填空题
     let options = [];
     if (q.correct === "" && q.distractors.every(opt => opt === "")) {
-      options = []; // 不生成选项按钮
+      options = []; // 填空题不生成选项按钮
     } else {
       options = generateOptions(q.correct, q.distractors);
     }
     return {
       question: q.question,
       options: options,
-      answer: q.correct, // 多项选择题中用于比对答案
-      ttsText: q.correct  // 用于语音朗读（可根据需要调整）
+      answer: q.correct,
+      ttsText: q.correct
     };
   });
   questions = shuffleArray(questions);
@@ -117,7 +113,7 @@ function showQuestion() {
   }
   
   const current = questions[currentQuestionIndex];
-  console.log("【调试】当前题目数据：", current);
+  console.log("【调试】当前题目数据：", JSON.stringify(current));
   
   // 显示题目文本
   const questionElem = document.createElement('h2');
@@ -125,9 +121,8 @@ function showQuestion() {
   questionElem.textContent = current.question;
   container.appendChild(questionElem);
   
-  // 根据题目类型决定显示方式
   if (current.options.length === 0) {
-    // 填空题：显示一个输入框
+    // 填空题显示一个输入框
     const input = document.createElement('input');
     input.type = "text";
     input.id = "answer-input";
@@ -138,14 +133,13 @@ function showQuestion() {
     submitBtn.textContent = "Submit Answer";
     submitBtn.onclick = () => {
       let userAnswer = document.getElementById("answer-input").value.trim();
-      // 这里可以添加与正确答案的比对逻辑（如果你有正确答案的话）
       alert("Your answer: " + userAnswer);
       currentQuestionIndex++;
       showQuestion();
     };
     container.appendChild(submitBtn);
   } else {
-    // 多项选择题：显示答案按钮
+    // 多项选择题显示答案按钮
     const labels = ['A', 'B', 'C', 'D', 'E'];
     current.options.forEach((option, index) => {
       const btn = document.createElement('button');
