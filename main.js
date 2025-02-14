@@ -5,45 +5,32 @@ let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
 
-// 使用你提供的 Google Sheets CSV 地址（更新时会自动调用最新数据）
+// 使用你提供的 Google Sheets CSV 地址
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
 
-// 从 Google Sheet 获取 CSV 数据，并转换成 JSON
+// 从 Google Sheets 获取 CSV 数据，并使用 PapaParse 转换成 JSON
 fetch(sheetURL)
   .then(response => response.text())
   .then(csvText => {
-    rawQuestions = parseCSV(csvText);
+    // 使用 PapaParse 解析 CSV
+    const results = Papa.parse(csvText, {
+      header: true,       // 第一行作为表头（请确保你的 Google Sheet 中表头名称与下面的字段匹配）
+      skipEmptyLines: true
+    });
+    
+    // 假设你的表头名称分别是：Question, Correct, Distractor1, Distractor2, Distractor3, Group
+    rawQuestions = results.data.map(row => ({
+      question: row["Question"],
+      correct: row["Correct"],
+      distractors: [row["Distractor1"], row["Distractor2"], row["Distractor3"]],
+      group: parseInt(row["Group"], 10)
+    }));
+    
     updateGroupSelector();
     updateQuestionSet();
     showQuestion();
   })
   .catch(error => console.error('Error loading quiz data:', error));
-
-/**
- * 解析 CSV 数据为 JSON 对象
- * 假设 CSV 列顺序为：
- * Column 0: Question (英文题目)
- * Column 1: Correct Answer (正确答案)
- * Column 2: Distractor1 (干扰项1)
- * Column 3: Distractor2 (干扰项2)
- * Column 4: Distractor3 (干扰项3)
- * Column 5: Group (组别)
- */
-function parseCSV(csvText) {
-  const rows = csvText.split("\n").filter(row => row.trim() !== "");
-  // 假设第一行是表头，从第二行开始读取数据
-  const data = rows.slice(1).map(row => {
-    // 简单按照逗号分割（如果数据中有逗号，请考虑使用更健壮的 CSV 解析方法）
-    const cols = row.split(",").map(col => col.replace(/"/g, '').trim());
-    return {
-      question: cols[0],
-      correct: cols[1],
-      distractors: [cols[2], cols[3], cols[4]],
-      group: parseInt(cols[5], 10)
-    };
-  });
-  return data;
-}
 
 // 更新页面上的组别选择框
 function updateGroupSelector() {
@@ -77,14 +64,14 @@ function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
 
-  // 将每个题目转换为带有随机排列答案选项的对象
+  // 为每个题目生成随机排列的答案选项
   questions = filteredQuestions.map(q => {
     let options = generateOptions(q.correct, q.distractors);
     return {
       question: q.question,
       options: options,
       answer: q.correct,
-      ttsText: q.correct  // 可根据需要调整语音播报文本
+      ttsText: q.correct  // 可根据需要调整语音播报的文本
     };
   });
 
@@ -92,7 +79,7 @@ function updateQuestionSet() {
   currentQuestionIndex = 0;
 }
 
-// 生成答案选项：合并正确答案和干扰项，并随机排列
+// 生成答案选项：合并正确答案与干扰项，然后随机打乱顺序
 function generateOptions(correct, distractors) {
   let options = [correct, ...distractors];
   return shuffleArray(options);
@@ -132,7 +119,7 @@ function showQuestion() {
   current.options.forEach((option, index) => {
     const btn = document.createElement('button');
     btn.className = "option-btn";
-    // 将答案选项保存到 data-value 属性中，便于后续比对
+    // 将答案选项存入 data-value 属性，便于后续比对
     btn.dataset.value = option;
     btn.textContent = `${labels[index]}. ${option}`;
     btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
@@ -153,7 +140,7 @@ function checkAnswer(selected, correct, ttsText) {
 // 使用 Web Speech API 朗读文本，若未找到芬兰语发音则回退使用 Google Translate TTS
 function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'fi-FI'; // 指定芬兰语
+  utterance.lang = 'fi-FI';
 
   const voices = speechSynthesis.getVoices();
   const finnishVoice = voices.find(voice => voice.lang.toLowerCase().includes('fi'));
@@ -177,4 +164,3 @@ document.getElementById('next-btn').addEventListener('click', () => {
   currentQuestionIndex++;
   showQuestion();
 });
-
