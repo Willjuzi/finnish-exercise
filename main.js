@@ -20,7 +20,7 @@ fetch(sheetURL)
     if (results.data && results.data.length > 0) {
       console.log("【调试】数据项键值：", Object.keys(results.data[0]));
     }
-    // 映射数据（调用 trim() 以去除空格），并用 JSON.stringify 输出完整数据
+    // 映射数据，调用 trim() 以去除两端空格
     rawQuestions = results.data.map(row => {
       const question = row["Question"] ? row["Question"].trim() : "";
       const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
@@ -70,19 +70,19 @@ function updateGroupSelector() {
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
-  // 根据答案内容判断题型：如果正确答案和所有干扰项都为空，则视为填空题
+  // 对每个题目，根据是否有正确答案来判断题型：
   questions = filteredQuestions.map(q => {
     let options = [];
-    if (q.correct === "" && q.distractors.every(opt => opt === "")) {
-      options = []; // 填空题不生成选项按钮
-    } else {
+    // 如果“Correct Answer”有内容，则视为多项选择题
+    if (q.correct && q.correct.length > 0) {
       options = generateOptions(q.correct, q.distractors);
     }
+    // 否则视为填空题（选项数组保持为空）
     return {
       question: q.question,
       options: options,
-      answer: q.correct,
-      ttsText: q.correct
+      answer: q.correct,  // 多项选择题用此字段来校对答案
+      ttsText: q.correct  // 语音朗读使用，可根据需要调整
     };
   });
   questions = shuffleArray(questions);
@@ -122,7 +122,7 @@ function showQuestion() {
   container.appendChild(questionElem);
   
   if (current.options.length === 0) {
-    // 填空题显示一个输入框
+    // 填空题：显示一个文本输入框和提交按钮
     const input = document.createElement('input');
     input.type = "text";
     input.id = "answer-input";
@@ -133,54 +133,9 @@ function showQuestion() {
     submitBtn.textContent = "Submit Answer";
     submitBtn.onclick = () => {
       let userAnswer = document.getElementById("answer-input").value.trim();
+      // 可在此添加比对逻辑，如与正确答案比较（此处仅显示提交的答案）
       alert("Your answer: " + userAnswer);
       currentQuestionIndex++;
       showQuestion();
     };
-    container.appendChild(submitBtn);
-  } else {
-    // 多项选择题显示答案按钮
-    const labels = ['A', 'B', 'C', 'D', 'E'];
-    current.options.forEach((option, index) => {
-      const btn = document.createElement('button');
-      btn.className = "option-btn";
-      btn.dataset.value = option;
-      btn.textContent = `${labels[index]}. ${option}`;
-      btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
-      container.appendChild(btn);
-    });
-  }
-}
-
-function checkAnswer(selected, correct, ttsText) {
-  if (selected === correct) {
-    alert("🎉 Congratulations! You got it right! Keep going! 🚀");
-  } else {
-    alert(`❌ Oops! Try again! The correct answer is: ${correct} 😉`);
-  }
-  speak(ttsText);
-}
-
-function speak(text) {
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'fi-FI';
-  const voices = speechSynthesis.getVoices();
-  const finnishVoice = voices.find(voice => voice.lang.toLowerCase().includes('fi'));
-  if (finnishVoice) {
-    utterance.voice = finnishVoice;
-    speechSynthesis.speak(utterance);
-  } else {
-    let audio = new Audio(`https://translate.google.com/translate_tts?ie=UTF-8&tl=fi&client=tw-ob&q=${encodeURIComponent(text)}`);
-    audio.oncanplaythrough = () => {
-      audio.play().catch(error => console.error("Audio play failed:", error));
-    };
-    audio.onerror = () => {
-      console.error("Error loading the TTS audio.");
-    };
-  }
-}
-
-document.getElementById('next-btn').addEventListener('click', () => {
-  currentQuestionIndex++;
-  showQuestion();
-});
+    container.append
