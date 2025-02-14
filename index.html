@@ -1,22 +1,135 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <title>芬兰语练习</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>芬兰语动词练习系统</title>
+    <style>
+        /* 基础样式 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #f0f2f5;
+        }
+
+        /* 控制栏样式 */
+        .control-bar {
+            margin: 20px 0;
+            padding: 15px;
+            background: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* 题目容器 */
+        #question-container {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+        }
+
+        /* 选项按钮样式 */
+        .option-btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .option-btn:hover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+
+        /* 正确/错误提示 */
+        .floating-message {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-weight: 500;
+            z-index: 1000;
+            animation: fadeInOut 2.5s;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; top: 0; }
+            10% { opacity: 1; top: 20px; }
+            90% { opacity: 1; top: 20px; }
+            100% { opacity: 0; top: 40px; }
+        }
+
+        .correct-message {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .wrong-message {
+            background: #f44336;
+            color: white;
+        }
+
+        /* 按钮样式 */
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        #next-btn {
+            background: #2196F3;
+            color: white;
+        }
+
+        #reset-btn {
+            background: #607D8B;
+            color: white;
+        }
+
+        /* 组别选择器 */
+        #group-selector {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+        }
+    </style>
 </head>
 <body>
-  <h1>芬兰语动词练习</h1>
-  
-  <div class="controls">
-    <select id="group-selector"></select>
-    <button id="reset-btn">重新开始</button>
-    <button id="next-btn">下一题</button>
-  </div>
+    <h1>芬兰语动词变形练习</h1>
+    
+    <div class="control-bar">
+        <select id="group-selector">
+            <option value="" disabled>正在加载题库...</option>
+        </select>
+        <button id="reset-btn">重新开始本组</button>
+        <button id="next-btn">下一题 ➔</button>
+    </div>
 
-  <div id="question-container"></div>
+    <div id="question-container">
+        <p style="color: #666;">正在加载题目...</p>
+    </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-  <script src="main.js"></script>
+    <!-- 依赖库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    
+    <!-- 主程序 -->
+    <script src="main.js"></script>
 </body>
 </html>
