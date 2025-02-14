@@ -7,105 +7,114 @@ let selectedGroup = 1;
 
 const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
 
+// 提前定义所有函数避免引用错误
+function updateGroupSelector() {
+  const groupSelector = document.getElementById("group-selector");
+  const groups = [...new Set(rawQuestions.map(q => q.group))].sort((a, b) => a - b);
+  
+  groupSelector.innerHTML = groups.map(g => 
+    `<option value="${g}">Group ${g}</option>`
+  ).join('');
+
+  groupSelector.addEventListener("change", (e) => {
+    selectedGroup = Number(e.target.value);
+    updateQuestionSet();
+    showQuestion();
+  });
+
+  if (groups.length > 0) {
+    selectedGroup = groups[0];
+    updateQuestionSet();
+  }
+}
+
+function updateQuestionSet() {
+  questions = rawQuestions
+    .filter(q => q.group === selectedGroup)
+    .map(q => ({
+      ...q,
+      options: generateOptions(q.correct, q.distractors)
+    }));
+  
+  questions = shuffleArray(questions);
+  currentQuestionIndex = 0;
+}
+
+function generateOptions(correct, distractors) {
+  // 强化数据清洗
+  const validDistractors = [...new Set(distractors)]
+    .filter(d => d && d.trim() !== "" && d !== correct);
+  
+  // 自动补足选项
+  let options = [correct, ...validDistractors];
+  while (options.length < 4) {
+    options.push(`选项${options.length + 1}`); // 中文占位符
+  }
+  
+  return shuffleArray(options).slice(0, 4);
+}
+
+function showQuestion() {
+  const container = document.getElementById("question-container");
+  container.innerHTML = "";
+  
+  if (currentQuestionIndex >= questions.length) {
+    container.innerHTML = `<div class="complete">已完成本组所有题目！</div>`;
+    return;
+  }
+  
+  const current = questions[currentQuestionIndex];
+  const labels = ["A", "B", "C", "D"];
+  
+  container.innerHTML = `
+    <h2>${current.question}</h2>
+    <div class="options">
+      ${current.options.map((opt, i) => `
+        <button class="option-btn" onclick="checkAnswer('${opt.replace(/'/g, "\\'")}', '${current.correct.replace(/'/g, "\\'")}')">
+          ${labels[i]}. ${opt}
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function checkAnswer(selected, correct) {
+  const isCorrect = selected.trim() === correct.trim();
+  alert(isCorrect ? "正确！" : `错误，正确答案是：${correct}`);
+  if (isCorrect) currentQuestionIndex++;
+  showQuestion();
+}
+
+function shuffleArray(arr) {
+  return arr.slice().sort(() => Math.random() - 0.5);
+}
+
 // 初始化加载
 fetch(sheetURL)
-  .then(response => response.text())
-  .then(csvText => {
-    const results = Papa.parse(csvText, {
+  .then(res => res.text())
+  .then(csv => {
+    const results = Papa.parse(csv, {
       header: true,
       skipEmptyLines: true
     });
 
-    // 强化数据清洗
     rawQuestions = results.data.map(row => {
-      const question = (row.Question || "").trim();
-      const correct = (row["Correct Answer"] || "").trim();
-      
-      // 处理干扰项
+      // 强化数据清洗
       const distractors = [
-        row["Distractor 1"],
-        row["Distractor 2"],
-        row["Distractor 3"]
-      ].map(d => (d || "").trim())  // 确保每个干扰项都经过trim处理
-       .filter(d => d !== "");      // 过滤空值
-
-      // 数据验证
-      if (distractors.length < 3) {
-        console.error(`干扰项不足: ${question}`, distractors);
-      }
-
+        row["Distractor 1"]?.trim() || "",
+        row["Distractor 2"]?.trim() || "",
+        row["Distractor 3"]?.trim() || ""
+      ].filter(d => d !== "");
+      
       return {
-        question: question,
-        correct: correct,
+        question: row.Question?.trim() || "题目加载失败",
+        correct: row["Correct Answer"]?.trim() || "答案缺失",
         distractors: distractors,
-        group: parseInt(row.Group || "1", 10)
+        group: Number(row.Group) || 1
       };
     });
 
     updateGroupSelector();
-    updateQuestionSet();
     showQuestion();
   })
-  .catch(error => console.error('数据加载失败:', error));
-
-// 选项生成逻辑（关键修复）
-function generateOptions(correct, distractors) {
-  // 确保至少有3个有效干扰项
-  const validDistractors = [...new Set(distractors)] // 去重
-    .filter(d => d !== correct); // 排除与正确答案相同的选项
-
-  // 合并选项并保证数量
-  let options = [correct, ...validDistractors];
-  
-  // 如果选项不足4个，用占位符补充
-  while (options.length < 4) {
-    options.push(`[缺失选项${options.length + 1}]`);
-  }
-
-  // 随机选择前4个选项（避免重复）
-  return shuffleArray(options).slice(0, 4);
-}
-
-// 强化答案检查
-function checkAnswer(selected, correct) {
-  const normalizedSelected = selected.replace(/\[.*?\]/g, "").trim(); // 移除占位符
-  const normalizedCorrect = correct.trim();
-
-  const isCorrect = normalizedSelected === normalizedCorrect;
-  
-  alert(isCorrect ? "✅ 正确！" : `❌ 错误。正确答案是：${normalizedCorrect}`);
-  speak(normalizedCorrect);
-  
-  return isCorrect;
-}
-
-// 显示题目（修复渲染问题）
-function showQuestion() {
-  const container = document.getElementById('question-container');
-  container.innerHTML = "";
-
-  if (currentQuestionIndex >= questions.length) {
-    container.innerHTML = `<div class="completed">练习完成！</div>`;
-    return;
-  }
-
-  const current = questions[currentQuestionIndex];
-  const labels = ['A', 'B', 'C', 'D'];
-
-  // 渲染题目
-  const questionHTML = `
-    <h2>${current.question}</h2>
-    <div class="options">
-      ${current.options.map((option, index) => `
-        <button class="option" 
-                onclick="checkAnswer('${option.replace(/'/g, "\\'")}', '${current.correct.replace(/'/g, "\\'")}')">
-          ${labels[index]}. ${option || '[选项加载失败]'}
-        </button>
-      `).join('')}
-    </div>
-  `;
-
-  container.innerHTML = questionHTML;
-}
-
-// 其他辅助函数保持不变...
+  .catch(err => console.error("加载失败:", err));
