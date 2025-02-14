@@ -11,49 +11,43 @@ const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUl
 fetch(sheetURL)
   .then(response => response.text())
   .then(csvText => {
-    console.log("【调试】CSV 原始数据：", csvText);  // 查看原始 CSV 数据
+    console.log("【调试】CSV 原始数据：", csvText);
     const results = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true
     });
     console.log("【调试】PapaParse 解析结果：", results);
-
-    // 如果有数据，打印第一个数据项的键，确认表头名称
     if (results.data && results.data.length > 0) {
       console.log("【调试】数据项键值：", Object.keys(results.data[0]));
     }
-
-    // 映射数据（对每个值调用 trim()）
+    // 映射数据（调用 trim() 以去除空格）
     rawQuestions = results.data.map(row => {
       const question = row["Question"] ? row["Question"].trim() : "";
       const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
       const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
       const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
       const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
-      const group = parseInt(row["Group"], 10);
-
-      // 打印每一行的映射结果，便于调试
-      console.log("【调试】映射行：", {
-        question, correct,
-        distractors: [distractor1, distractor2, distractor3],
-        group
+      const group = parseFloat(row["Group"]);  // 保留小数部分
+      console.log("【调试】映射行：", { 
+        question, 
+        correct, 
+        distractors: [distractor1, distractor2, distractor3], 
+        group 
       });
-
-      return {
-        question: question,
-        correct: correct,
-        distractors: [distractor1, distractor2, distractor3],
-        group: group
+      return { 
+        question: question, 
+        correct: correct, 
+        distractors: [distractor1, distractor2, distractor3], 
+        group: group 
       };
     });
-
+    
     updateGroupSelector();
     updateQuestionSet();
     showQuestion();
   })
   .catch(error => console.error('Error loading quiz data:', error));
 
-// 更新组别选择框
 function updateGroupSelector() {
   const groupSelector = document.getElementById("group-selector");
   groupSelector.innerHTML = "";
@@ -66,7 +60,7 @@ function updateGroupSelector() {
     groupSelector.appendChild(option);
   });
   groupSelector.addEventListener("change", (event) => {
-    selectedGroup = parseInt(event.target.value, 10);
+    selectedGroup = parseFloat(event.target.value);
     updateQuestionSet();
     showQuestion();
   });
@@ -76,31 +70,34 @@ function updateGroupSelector() {
   }
 }
 
-// 根据当前选定的组别生成题库
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
-  // 为每个题目生成随机排列的答案选项
+  // 对于每个题目，根据答案内容判断题型
   questions = filteredQuestions.map(q => {
-    let options = generateOptions(q.correct, q.distractors);
+    // 如果正确答案和所有干扰项都为空，则视为填空题
+    let options = [];
+    if (q.correct === "" && q.distractors.every(opt => opt === "")) {
+      options = []; // 不生成选项按钮
+    } else {
+      options = generateOptions(q.correct, q.distractors);
+    }
     return {
       question: q.question,
       options: options,
-      answer: q.correct,
-      ttsText: q.correct
+      answer: q.correct, // 多项选择题中用于比对答案
+      ttsText: q.correct  // 用于语音朗读（可根据需要调整）
     };
   });
   questions = shuffleArray(questions);
   currentQuestionIndex = 0;
 }
 
-// 合并正确答案与干扰项，并随机排列
 function generateOptions(correct, distractors) {
   let options = [correct, ...distractors];
   return shuffleArray(options);
 }
 
-// 随机打乱数组
 function shuffleArray(array) {
   let newArray = array.slice();
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -110,34 +107,57 @@ function shuffleArray(array) {
   return newArray;
 }
 
-// 显示当前题目和选项
 function showQuestion() {
   const container = document.getElementById('question-container');
   container.innerHTML = "";
+  
   if (currentQuestionIndex >= questions.length) {
     alert("🎉 Practice complete! You have finished all questions in this group!");
     return;
   }
+  
   const current = questions[currentQuestionIndex];
   console.log("【调试】当前题目数据：", current);
+  
   // 显示题目文本
   const questionElem = document.createElement('h2');
   questionElem.className = "question-text";
   questionElem.textContent = current.question;
   container.appendChild(questionElem);
-  // 定义选项前缀
-  const labels = ['A', 'B', 'C', 'D'];
-  current.options.forEach((option, index) => {
-    const btn = document.createElement('button');
-    btn.className = "option-btn";
-    btn.dataset.value = option;
-    btn.textContent = `${labels[index]}. ${option}`;
-    btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
-    container.appendChild(btn);
-  });
+  
+  // 根据题目类型决定显示方式
+  if (current.options.length === 0) {
+    // 填空题：显示一个输入框
+    const input = document.createElement('input');
+    input.type = "text";
+    input.id = "answer-input";
+    input.placeholder = "Type your answer here";
+    container.appendChild(input);
+    
+    const submitBtn = document.createElement('button');
+    submitBtn.textContent = "Submit Answer";
+    submitBtn.onclick = () => {
+      let userAnswer = document.getElementById("answer-input").value.trim();
+      // 这里可以添加与正确答案的比对逻辑（如果你有正确答案的话）
+      alert("Your answer: " + userAnswer);
+      currentQuestionIndex++;
+      showQuestion();
+    };
+    container.appendChild(submitBtn);
+  } else {
+    // 多项选择题：显示答案按钮
+    const labels = ['A', 'B', 'C', 'D', 'E'];
+    current.options.forEach((option, index) => {
+      const btn = document.createElement('button');
+      btn.className = "option-btn";
+      btn.dataset.value = option;
+      btn.textContent = `${labels[index]}. ${option}`;
+      btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
+      container.appendChild(btn);
+    });
+  }
 }
 
-// 检查答案
 function checkAnswer(selected, correct, ttsText) {
   if (selected === correct) {
     alert("🎉 Congratulations! You got it right! Keep going! 🚀");
@@ -147,7 +167,6 @@ function checkAnswer(selected, correct, ttsText) {
   speak(ttsText);
 }
 
-// 朗读文本（使用 Web Speech API，如果失败则使用 Google Translate TTS）
 function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'fi-FI';
@@ -167,7 +186,6 @@ function speak(text) {
   }
 }
 
-// “Next” 按钮点击事件
 document.getElementById('next-btn').addEventListener('click', () => {
   currentQuestionIndex++;
   showQuestion();
