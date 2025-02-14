@@ -6,7 +6,7 @@ let currentQuestionIndex = 0;
 let selectedGroup = 1;
 let verbOptionsDict = {};  // 用来保存每个动词对应的选项数组
 
-// 提取题目中的动词（从第一个括号中提取）
+// 从题目文本中提取动词：提取第一个括号内的内容
 function extractVerb(text) {
   let match = text.match(/\(([^)]+)\)/);
   return match ? match[1].trim() : "";
@@ -45,11 +45,11 @@ fetch(sheetURL)
       return mapped;
     });
     
-    // 建立动词与选项的字典：只对那些“Correct Answer”有内容的行建立映射
+    // 建立动词与选项的字典：对那些“Correct Answer”有内容的行建立映射
     rawQuestions.forEach(row => {
       let verb = extractVerb(row.question);
       if (verb && row.correct) {
-        // 保存原始顺序的选项数组（未打乱）：正确答案放在第一位
+        // 保存原始顺序的选项数组（正确答案在第一位）
         verbOptionsDict[verb] = [row.correct, ...row.distractors];
       }
     });
@@ -57,6 +57,8 @@ fetch(sheetURL)
     
     updateGroupSelector();
     updateQuestionSet();
+    // 过滤掉没有补全选项的题目，保证所有题目均为多项选择题
+    questions = questions.filter(q => q.options && q.options.length > 0);
     showQuestion();
   })
   .catch(error => console.error("Error loading quiz data:", error));
@@ -75,6 +77,7 @@ function updateGroupSelector() {
   groupSelector.addEventListener("change", event => {
     selectedGroup = parseFloat(event.target.value);
     updateQuestionSet();
+    questions = questions.filter(q => q.options && q.options.length > 0);
     showQuestion();
   });
   if (uniqueGroups.length > 0) {
@@ -86,22 +89,23 @@ function updateGroupSelector() {
 function updateQuestionSet() {
   let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
   filteredQuestions = shuffleArray(filteredQuestions);
-  // 对每个题目都生成多项选择题
+  // 对每个题目生成多项选择题
   questions = filteredQuestions.map(q => {
     let options = [];
     let answer = q.correct;
-    // 如果当前行有正确答案，则直接生成选项
+    // 如果该行有正确答案，则直接生成选项
     if (q.correct && q.correct.length > 0) {
        options = generateOptions(q.correct, q.distractors);
     } else {
-       // 如果当前行选项为空，则尝试从字典中查找对应动词的选项
+       // 如果当前行的选项为空，则尝试从字典中查找对应动词的选项
        let verb = extractVerb(q.question);
        if (verb && verbOptionsDict[verb]) {
            let storedOptions = verbOptionsDict[verb];
            options = generateOptions(storedOptions[0], storedOptions.slice(1));
            answer = storedOptions[0];
        } else {
-           options = []; // 如果找不到，则保持为空（理论上不应出现这种情况）
+           // 没有找到补全选项的情况，此题将返回空选项
+           options = [];
        }
     }
     return {
@@ -147,7 +151,7 @@ function showQuestion() {
   questionElem.textContent = current.question;
   container.appendChild(questionElem);
   
-  // 显示多项选择题选项
+  // 显示多项选择题选项（标签依次为 A、B、C、D、E）
   const labels = ["A", "B", "C", "D", "E"];
   current.options.forEach((option, index) => {
     const btn = document.createElement("button");
