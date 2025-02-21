@@ -1,60 +1,112 @@
-<!-- index.html -->
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>芬兰语学习助手</title>
-  <link rel="stylesheet" href="styles.css">
+  <title>Learning Finnish - Have Fun!</title>
+  <style>
+    /* 全局样式 */
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+      background-color: #f0f8ff;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    h1 {
+      font-size: 30px;
+      color: #007bff;
+      margin-bottom: 20px;
+    }
+    /* 已移除 .logo 样式 */
+    label {
+      font-size: 18px;
+      margin-right: 10px;
+    }
+    select {
+      font-size: 18px;
+      padding: 8px;
+      margin-bottom: 20px;
+      border-radius: 5px;
+      border: 1px solid #007bff;
+    }
+    #question-container {
+      margin: 30px 0;
+    }
+    .question-text {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    .option-btn {
+      display: block;
+      width: 85%;
+      margin: 12px auto;
+      padding: 14px;
+      font-size: 18px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+      background-color: #d7eaff;
+      transition: background 0.3s, color 0.3s;
+    }
+    .option-btn:hover {
+      background-color: #007bff;
+      color: white;
+    }
+    .next-btn {
+      background-color: #007bff;
+      color: white;
+      font-size: 16px;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s;
+      width: 120px;
+    }
+    .next-btn:hover {
+      background-color: #0056b3;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
-    <h1>芬兰语学习助手</h1>
+    <!-- 已移除 Logo -->
+    <h1>Learning Finnish - Have Fun!</h1>
     
-    <!-- 模式切换 -->
-    <div class="mode-switcher">
-      <button class="mode-btn active" data-mode="quiz">练习题</button>
-      <button class="mode-btn" data-mode="vocab">背单词</button>
-      <button class="mode-btn" data-mode="dictation">听写测试</button>
+    <!-- 新增模式选择 -->
+    <div>
+      <label for="mode-selector">Mode:</label>
+      <select id="mode-selector">
+        <option value="practice">Practice</option>
+        <option value="vocab">Vocabulary</option>
+      </select>
     </div>
 
-    <!-- 组别选择 -->
-    <div class="group-selector">
-      <label for="group-select">选择学习组：</label>
-      <select id="group-select"></select>
+    <!-- 原分组选择调整为组数选择 -->
+    <div>
+      <label for="group-selector">Group:</label>
+      <select id="group-selector"></select>
     </div>
 
-    <!-- 练习模式容器 -->
-    <div id="quiz-container" class="content-container active">
-      <div id="question-container"></div>
-      <button id="next-btn" class="control-btn">下一题</button>
-    </div>
-
-    <!-- 背单词容器 -->
-    <div id="vocab-container" class="content-container">
-      <div class="word-card">
-        <div id="finnish-word" class="word-display"></div>
-        <div id="chinese-translation" class="translation"></div>
-        <div class="card-controls">
-          <button id="toggle-translation" class="control-btn">显示翻译</button>
-          <button id="next-word" class="control-btn">下一个单词</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 听写容器 -->
-    <div id="dictation-container" class="content-container">
-      <div id="dictation-prompt" class="dictation-prompt"></div>
-      <input type="text" id="dictation-input" placeholder="在此输入芬兰语...">
-      <div class="dictation-controls">
-        <button id="check-dictation" class="control-btn">检查答案</button>
-        <button id="next-dictation" class="control-btn">下一题</button>
-      </div>
-      <div id="dictation-result"></div>
-    </div>
+    <!-- 题目展示区域 -->
+    <div id="question-container"></div>
+    
+    <!-- 下一题按钮 -->
+    <button id="next-btn" class="next-btn">Next</button>
   </div>
 
+  <!-- 引入 PapaParse 库 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <!-- 引入主脚本 -->
   <script src="main.js"></script>
 </body>
 </html>
