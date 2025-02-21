@@ -9,7 +9,7 @@ let selectedGroup = 1;
 // API 配置（列名已匹配）
 const API_CONFIG = {
   practice: "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/export?format=csv",
-  vocab: "https://docs.google.com/spreadsheets/d/1-8-Iii4s7G8EfyTkPyupw1MedNbuKcXS2fp-GWe0f28/export?format=csv"
+  vocab: "https://docs.google.com/spreadsheets/d/1VD4SYUVH5An14uS8cxzGlREbRx2eL6SeWUMBpNWp9ZQ/export?format=csv"
 };
 
 // ============== 初始化事件监听 ==============
