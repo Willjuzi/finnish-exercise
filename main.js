@@ -63,6 +63,53 @@ function handlePracticeData(csvText) {
     showError("练习数据格式错误");
   }
 }
+// ============== 背单词选项生成 ==============
+function generateVocabOptions(correctWord) {
+  const sameGroupWords = vocabData.filter(word => 
+    word.group === selectedGroup && 
+    word.word !== correctWord.word
+  );
+  
+  const distractors = shuffleArray(sameGroupWords)
+    .slice(0, 3)
+    .map(word => word.definition);
+
+  return shuffleArray([correctWord.definition, ...distractors]);
+}
+
+// ============== 界面渲染 ==============
+function showQuestion() {
+  const container = document.getElementById("question-container");
+  container.innerHTML = "";
+
+  if (currentQuestionIndex >= questions.length) {
+    const msg = currentMode === 'practice' 
+      ? "🎉 本组练习已完成！" 
+      : "🎉 本组单词已复习完成！";
+    container.innerHTML = `<h2 style="color: #4CAF50;">${msg}</h2>`;
+    return;
+  }
+
+  const current = questions[currentQuestionIndex];
+  
+  // 显示题目
+  const questionElem = document.createElement("h2");
+  questionElem.className = "question-text";
+  questionElem.textContent = currentMode === 'practice' 
+    ? current.question 
+    : `单词：${current.word}`;
+  container.appendChild(questionElem);
+
+  // 生成选项
+  const labels = ["A", "B", "C", "D"];
+  current.options.forEach((option, index) => {
+    const btn = document.createElement("button");
+    btn.className = "option-btn";
+    btn.textContent = `${labels[index]}. ${option}`;
+    btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
+    container.appendChild(btn);
+  });
+}
 
 // ============== 分组选择器修复 ==============
 function updateGroupSelector() {
