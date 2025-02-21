@@ -104,6 +104,8 @@ function handleVocabData(csvText) {
       }
     });
 
+    console.log("原始数据（调试）:", results.data);
+
     vocabData = results.data
       .filter(row => row["word"]?.trim()) // 使用英文列名 "word"
       .map(row => ({
