@@ -9,7 +9,7 @@ let selectedGroup = 1;
 // API 配置（列名已匹配）
 const API_CONFIG = {
   practice: "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/export?format=csv",
-  vocab: "https://docs.google.com/spreadsheets/d/1VD4SYUVH5An14uS8cxzGlREbRx2eL6SeWUMBpNWp9ZQ/export?format=csv"
+  vocab: "https://docs.google.com/spreadsheets/d/1-8-Iii4s7G8EfyTkPyupw1MedNbuKcXS2fp-GWe0f28/export?format=csv"
 };
 
 // ============== 初始化事件监听 ==============
@@ -274,13 +274,33 @@ function generateOptions(correct, distractors) {
 
 function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "fi-FI";
+  utterance.lang = "fi-FI"; // 设置语言为芬兰语
+  utterance.voice = getFinnishVoice(); // 使用芬兰语的语音
+
   speechSynthesis.speak(utterance);
+}
+
+function getFinnishVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  for (let voice of voices) {
+    if (voice.lang === "fi-FI") {
+      return voice;
+    }
+  }
+  return null; // 如果没有找到合适的语音，则返回 null
 }
 
 // ============== 初始化执行 ==============
 initializeEventListeners();
 initializeData();
+
+// 加载 PapaParse 库
+if (typeof Papa === 'undefined') {
+  const script = document.createElement('script');
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js';
+  script.onload = initializeData; // 确保在库加载后初始化数据
+  document.head.appendChild(script);
+}
 
 
 
