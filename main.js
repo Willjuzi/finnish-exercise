@@ -107,12 +107,13 @@ function handleVocabData(csvText) {
     vocabData = results.data
       .filter(row => row["word"]?.trim()) // 使用英文列名 "word"
       .map(row => ({
-        word: row["word"]?.trim(),
-        definition: row["Definition"]?.trim(), // 使用英文列名 "Definition"
-        example: row["example"]?.trim() || "", // 示例列为可选
+        word: row["word"],
+        definition: row["Definition"], // 使用英文列名 "Definition"
+        example: row["example"] || "", // 示例列为可选
         group: row["group"]
       }));
 
+    console.log("背单词数据（调试）:", vocabData);
     updateGroupSelector();
     updateQuestionSet();
     showQuestion();
@@ -177,6 +178,7 @@ function updateQuestionSet() {
         ttsText: word.word
       }));
     questions = shuffleArray(filtered);
+    console.log(`当前组别：Group ${selectedGroup}，单词数量：${filtered.length}`);
   }
   currentQuestionIndex = 0;
 }
