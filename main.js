@@ -9,7 +9,7 @@ let selectedGroup = 1;
 // API 配置（列名已匹配）
 const API_CONFIG = {
   practice: "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/export?format=csv",
-  vocab: "https://docs.google.com/spreadsheets/d/1VD4SYUVH5An14uS8cxzGlREbRx2eL6SeWUMBpNWp9ZQ/export?format=csv"
+  vocab: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJZ8Iii4s7G8EfyTkPyupw1MedNbuKcXS2fp-GWe0f28/pub?output=csv"
 };
 
 // ============== 初始化事件监听 ==============
@@ -281,6 +281,14 @@ function speak(text) {
 // ============== 初始化执行 ==============
 initializeEventListeners();
 initializeData();
+
+// 加载 PapaParse 库
+if (typeof Papa === 'undefined') {
+  const script = document.createElement('script');
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js';
+  script.onload = initializeData; // 确保在库加载后初始化数据
+  document.head.appendChild(script);
+}
 
 
 
