@@ -108,17 +108,17 @@ function handleVocabData(csvText) {
 
     // 检查列名是否存在
     const headers = results.meta.fields;
-    if (!headers.includes("word") || !headers.includes("Definition")) {
+    if (!headers.includes("Word") || !headers.includes("Definition")) {
       console.error("CSV 文件缺少必要的列：", headers);
       showError("CSV 文件缺少必要的列");
       return;
     }
 
     vocabData = results.data
-      .filter(row => row["word"] && row["Definition"]) // 使用英文列名 "word" 和 "Definition"
+      .filter(row => row["Word"] && row["Definition"]) // 使用正确的列名 "Word" 和 "Definition"
       .map(row => ({
-        word: row["word"],
-        definition: row["Definition"], // 使用英文列名 "Definition"
+        word: row["Word"],
+        definition: row["Definition"], // 使用正确的列名 "Definition"
         group: row["Group"]
       }));
 
