@@ -5,7 +5,6 @@ let vocabData = [];
 let questions = [];
 let currentQuestionIndex = 0;
 let selectedGroup = 1;
-let verbOptionsDict = {};
 
 // API 配置（列名已匹配）
 const API_CONFIG = {
@@ -97,7 +96,7 @@ function handleVocabData(csvText) {
       skipEmptyLines: true,
       transform: (value, header) => {
         // 列名已调整为英文
-        if (header === "group") {
+        if (header === "Group") {
           const num = parseInt(value) || 1;
           return Math.abs(num); // 处理负数组别
         }
@@ -105,16 +104,32 @@ function handleVocabData(csvText) {
       }
     });
 
+    console.log("背单词原始数据（调试）:", results.data);
+
+    // 检查列名是否存在
+    const headers = results.meta.fields;
+    if (!headers.includes("word") || !headers.includes("Definition")) {
+      console.error("CSV 文件缺少必要的列：", headers);
+      showError("CSV 文件缺少必要的列");
+      return;
+    }
+
     vocabData = results.data
-      .filter(row => row["word"]?.trim()) // 使用英文列名 "word"
+      .filter(row => row["word"] && row["Definition"]) // 使用英文列名 "word" 和 "Definition"
       .map(row => ({
-        word: row["word"]?.trim(),
-        definition: row["Definition"]?.trim(), // 使用英文列名 "Definition"
-        example: row["example"]?.trim() || "", // 示例列为可选
-        group: row["group"]
+        word: row["word"],
+        definition: row["Definition"], // 使用英文列名 "Definition"
+        group: row["Group"]
       }));
 
-    console.log("背单词数据（调试）:", vocabData);
+    console.log("过滤后的数据（调试）:", vocabData);
+
+    if (vocabData.length === 0) {
+      console.error("词汇数据为空或格式不正确");
+      showError("词汇数据为空或格式不正确");
+      return;
+    }
+
     updateGroupSelector();
     updateQuestionSet();
     showQuestion();
@@ -266,3 +281,6 @@ function speak(text) {
 // ============== 初始化执行 ==============
 initializeEventListeners();
 initializeData();
+
+
+
