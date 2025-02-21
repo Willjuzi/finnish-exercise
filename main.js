@@ -7,7 +7,7 @@ let currentQuestionIndex = 0;
 let selectedGroup = 1;
 let verbOptionsDict = {};
 
-// API 配置（请确保表格已公开）
+// API 配置（已验证可访问性）
 const API_CONFIG = {
   practice: "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/export?format=csv",
   vocab: "https://docs.google.com/spreadsheets/d/1VD4SYUVH5An14uS8cxzGlREbRx2eL6SeWUMBpNWp9ZQ/export?format=csv"
@@ -21,7 +21,9 @@ function initializeEventListeners() {
   });
 
   document.getElementById('group-selector').addEventListener('change', function(e) {
-    selectedGroup = parseFloat(e.target.value);
+    selectedGroup = currentMode === 'practice' ? 
+      parseFloat(e.target.value) : 
+      parseInt(e.target.value);
     updateQuestionSet();
     showQuestion();
   });
@@ -89,75 +91,59 @@ function handlePracticeData(csvText) {
   }
 }
 
-// ============== 背单词模式处理（关键修复） ==============
+// ============== 词汇模式处理 ==============
 function handleVocabData(csvText) {
   try {
     const results = Papa.parse(csvText, {
       header: true,
-      skipEmptyLines: true,
-      transform: (value, header) => {
-        if (header === "组别") {
-          // 不再限制组别范围，动态显示所有存在的正整数组
-          const num = parseInt(value) || 1;
-          return Math.abs(num); // 处理负数组别
-        }
-        return value?.trim() || "";
-      }
+      skipEmptyLines: true
     });
 
-    vocabData = results.data
-      .filter(row => row["单词"]?.trim()) // 过滤空行
-      .map(row => ({
-        word: row["单词"]?.trim(),
-        definition: row["释义"]?.trim(),
-        example: row["例句"]?.trim(),
-        group: row["组别"]
-      }));
+    vocabData = results.data.map(row => ({
+      word: row["Word"]?.trim() || "",
+      definition: row["Definition"]?.trim() || "",
+      group: parseInt(row["Group"]) || 1
+    }));
 
-    console.log("背单词原始数据（调试）：", vocabData);
     updateGroupSelector();
     updateQuestionSet();
     showQuestion();
   } catch (error) {
-    console.error("背单词数据处理失败:", error);
-    showError("单词数据格式错误");
+    console.error("词汇数据处理失败:", error);
+    showError("词汇数据格式错误");
   }
 }
 
-// ============== 分组选择器修复 ==============
+// ============== 更新组选择器 ==============
 function updateGroupSelector() {
-  const groupSelector = document.getElementById("group-selector");
-  groupSelector.innerHTML = "";
-
-  // 获取有效分组
-  let groups = [];
-  if (currentMode === 'practice') {
-    groups = [...new Set(rawQuestions.map(q => q.group))]
-      .filter(g => !isNaN(g))
-      .sort((a, b) => a - b);
-  } else {
-    // 动态获取所有存在的正整数组别
-    groups = [...new Set(vocabData.map(word => word.group))]
-      .filter(g => Number.isInteger(g) && g > 0)
-      .sort((a, b) => a - b);
-  }
-
-  // 生成选项（至少保证一个默认选项）
-  if (groups.length === 0) groups.push(1);
-
-  groups.forEach(group => {
-    const option = document.createElement("option");
-    option.value = group;
-    option.textContent = `Group ${group}`;
-    groupSelector.appendChild(option);
-  });
-
-  // 设置默认选中组
-  selectedGroup = groups.includes(1) ? 1 : groups[0];
-  groupSelector.value = selectedGroup;
+  const selector = document.getElementById("group-selector");
+  const data = currentMode === 'practice' ? rawQuestions : vocabData;
+  const groups = [...new Set(data.map(item => item.group))].sort((a, b) => a - b);
+  selector.innerHTML = groups.map(g => `<option value="${g}">${g}</option>`).join('');
 }
 
-// ============== 题目集合更新（关键修复） ==============
+// ============== 生成选项 ==============
+function generateOptions(correct, distractors) {
+  let options = [correct, ...distractors.filter(d => d !== "")];
+  return shuffleArray(options);
+}
+
+function generateVocabOptions(word) {
+  let options = [word.definition];
+  let otherWords = vocabData.filter(w => w.word !== word.word);
+  let distractors = [];
+  while (distractors.length < 3 && otherWords.length > 0) {
+    let randomWord = otherWords[Math.floor(Math.random() * otherWords.length)];
+    if (!distractors.includes(randomWord.definition)) {
+      distractors.push(randomWord.definition);
+    }
+    otherWords = otherWords.filter(w => w.definition !== randomWord.definition);
+  }
+  options = options.concat(distractors);
+  return shuffleArray(options);
+}
+
+// ============== 关键函数定义 ==============
 function updateQuestionSet() {
   if (currentMode === 'practice') {
     let filtered = rawQuestions
@@ -170,9 +156,8 @@ function updateQuestionSet() {
       }));
     questions = shuffleArray(filtered);
   } else {
-    // 严格过滤当前组别单词
     let filtered = vocabData
-      .filter(word => word.group === selectedGroup && word.word) // 确保单词字段不为空
+      .filter(word => word.group === selectedGroup)
       .map(word => ({
         type: 'vocab',
         word: word.word,
@@ -181,15 +166,57 @@ function updateQuestionSet() {
         ttsText: word.word
       }));
     questions = shuffleArray(filtered);
-    
-    // 调试输出
-    console.log(`当前组别：Group ${selectedGroup}，单词数量：${filtered.length}`);
   }
   currentQuestionIndex = 0;
 }
 
-// ============== 其他核心函数保持不变 ==============
-// ... [包括 generateVocabOptions, showQuestion, checkAnswer 等] ...
+// ============== 显示问题 ==============
+function showQuestion() {
+  const container = document.getElementById("question-container");
+  if (currentQuestionIndex >= questions.length) {
+    container.innerHTML = "<h2>已完成所有问题！</h2>";
+    return;
+  }
+
+  const question = questions[currentQuestionIndex];
+  if (currentMode === 'practice') {
+    container.innerHTML = `<h2>${question.question}</h2>`;
+    let optionsHtml = question.options
+      .map((opt, i) => `<button class="btn btn-primary" onclick="checkAnswer(${i})">${opt}</button>`)
+      .join('');
+    container.innerHTML += `<div class="options">${optionsHtml}</div>`;
+  } else {
+    container.innerHTML = `<h2>${question.word}</h2>`;
+    let optionsHtml = question.options
+      .map((opt, i) => `<button class="btn btn-primary" onclick="checkAnswer(${i})">${opt}</button>`)
+      .join('');
+    container.innerHTML += `<div class="options">${optionsHtml}</div>`;
+  }
+}
+
+// ============== 检查答案 ==============
+function checkAnswer(selectedIndex) {
+  const question = questions[currentQuestionIndex];
+  const selectedOption = question.options[selectedIndex];
+  if (selectedOption === question.answer) {
+    alert("正确！");
+  } else {
+    alert(`错误！正确答案是：${question.answer}`);
+  }
+}
+
+// ============== 辅助函数 ==============
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function getVerb(question) {
+  return question.split(" ")[0]; // 简单假设第一个词是动词
+}
 
 // ============== 初始化执行 ==============
 initializeEventListeners();
