@@ -13,14 +13,14 @@ const API_CONFIG = {
   vocab: "https://docs.google.com/spreadsheets/d/1VD4SYUVH5An14uS8cxzGlREbRx2eL6SeWUMBpNWp9ZQ/export?format=csv"
 };
 
-// ============== 初始化 ==============
+// ============== 初始化事件监听 ==============
 document.getElementById('mode-selector').addEventListener('change', function(e) {
   currentMode = e.target.value;
   initializeData();
 });
 
 document.getElementById('group-selector').addEventListener('change', function(e) {
-  selectedGroup = parseInt(e.target.value);
+  selectedGroup = parseFloat(e.target.value);
   updateQuestionSet();
   showQuestion();
 });
@@ -30,7 +30,7 @@ document.getElementById('next-btn').addEventListener('click', () => {
   showQuestion();
 });
 
-// ============== 核心函数 ==============
+// ============== 数据初始化 ==============
 function initializeData() {
   const apiUrl = API_CONFIG[currentMode];
   
@@ -46,7 +46,7 @@ function initializeData() {
     .catch(error => console.error("数据加载失败:", error));
 }
 
-// 处理练习题数据
+// ============== 练习模式处理 ==============
 function handlePracticeData(csvText) {
   const results = Papa.parse(csvText, {
     header: true,
@@ -77,37 +77,54 @@ function handlePracticeData(csvText) {
   showQuestion();
 }
 
-// 处理背单词数据
+// ============== 背单词模式处理 ==============
 function handleVocabData(csvText) {
   const results = Papa.parse(csvText, {
     header: true,
-    skipEmptyLines: true
+    skipEmptyLines: true,
+    transform: (value, header) => {
+      // 特殊处理组别字段
+      if (header === "组别") {
+        const num = Math.abs(parseInt(value) || 1); // 负数组别自动转正
+        return num > 0 ? num : 1; // 确保最小为1
+      }
+      return value?.trim() || "";
+    }
   });
 
-  vocabData = results.data.map(row => ({
-    word: row["单词"]?.trim() || "",
-    definition: row["释义"]?.trim() || "",
-    example: row["例句"]?.trim() || "",
-    group: parseInt(row["组别"]) || 1
-  }));
+  vocabData = results.data
+    .filter(row => row["单词"]) // 过滤空行
+    .map(row => ({
+      word: row["单词"],
+      definition: row["释义"],
+      example: row["例句"],
+      group: row["组别"]
+    }));
 
+  console.log("背单词数据加载结果：", vocabData);
   updateGroupSelector();
   updateQuestionSet();
   showQuestion();
 }
 
-// ============== 功能函数 ==============
+// ============== 分组选择器逻辑 ==============
 function updateGroupSelector() {
   const groupSelector = document.getElementById("group-selector");
   groupSelector.innerHTML = "";
-  
-  // 获取当前模式下的所有组别
-  let groups = currentMode === 'practice' 
-    ? [...new Set(rawQuestions.map(q => q.group))]
-    : [...new Set(vocabData.map(word => word.group))];
-  
+
+  // 获取当前模式的有效分组
+  let groups = [];
+  if (currentMode === 'practice') {
+    groups = [...new Set(rawQuestions.map(q => q.group))].sort((a, b) => a - b);
+  } else {
+    // 动态获取所有存在的正整数组别（支持第八组及以上）
+    groups = [...new Set(vocabData.map(word => word.group))]
+      .filter(g => Number.isInteger(g) && g > 0)
+      .sort((a, b) => a - b);
+  }
+
   // 生成选项
-  groups.sort((a, b) => a - b).forEach(group => {
+  groups.forEach(group => {
     const option = document.createElement("option");
     option.value = group;
     option.textContent = `Group ${group}`;
@@ -115,13 +132,14 @@ function updateGroupSelector() {
   });
 
   // 设置默认选中组
-  selectedGroup = groups[0] || 1;
+  selectedGroup = groups.length > 0 ? groups[0] : 1;
   groupSelector.value = selectedGroup;
 }
 
+// ============== 题目集合更新 ==============
 function updateQuestionSet() {
   if (currentMode === 'practice') {
-    // 练习模式：过滤当前组 + 随机排序
+    // 练习模式逻辑
     let filtered = rawQuestions
       .filter(q => q.group === selectedGroup)
       .map(q => ({
@@ -132,7 +150,7 @@ function updateQuestionSet() {
       }));
     questions = shuffleArray(filtered);
   } else {
-    // 背单词模式：过滤当前组 + 生成选项
+    // 背单词模式逻辑
     let filtered = vocabData
       .filter(word => word.group === selectedGroup)
       .map(word => ({
@@ -147,7 +165,7 @@ function updateQuestionSet() {
   currentQuestionIndex = 0;
 }
 
-// 生成背单词选项（正确释义 + 3个同组干扰项）
+// ============== 背单词选项生成 ==============
 function generateVocabOptions(correctWord) {
   const sameGroupWords = vocabData.filter(word => 
     word.group === selectedGroup && 
@@ -161,12 +179,12 @@ function generateVocabOptions(correctWord) {
   return shuffleArray([correctWord.definition, ...distractors]);
 }
 
-// ============== 界面相关 ==============
+// ============== 界面渲染 ==============
 function showQuestion() {
   const container = document.getElementById("question-container");
   container.innerHTML = "";
 
-  // 全部完成提示
+  // 完成提示
   if (currentQuestionIndex >= questions.length) {
     const msg = currentMode === 'practice' 
       ? "🎉 练习完成！本组题目已全部完成！"
@@ -177,7 +195,7 @@ function showQuestion() {
 
   const current = questions[currentQuestionIndex];
   
-  // 显示问题
+  // 显示题目
   const questionElem = document.createElement("h2");
   questionElem.className = "question-text";
   questionElem.textContent = currentMode === 'practice' 
@@ -186,49 +204,4 @@ function showQuestion() {
   container.appendChild(questionElem);
 
   // 生成选项按钮
-  const labels = ["A", "B", "C", "D"];
-  current.options.forEach((option, index) => {
-    const btn = document.createElement("button");
-    btn.className = "option-btn";
-    btn.textContent = `${labels[index]}. ${option}`;
-    btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
-    container.appendChild(btn);
-  });
-}
-
-function checkAnswer(selected, correct, ttsText) {
-  if (selected === correct) {
-    alert("✅ 正确！正确答案是：" + correct);
-  } else {
-    alert(`❌ 错误！正确答案是：${correct}`);
-  }
-  speak(ttsText);
-}
-
-// ============== 工具函数 ==============
-function getVerb(text) {
-  const prefix = "Minkä tyyppinen verbi on ";
-  if (text.startsWith(prefix)) {
-    let verb = text.slice(prefix.length).split("(")[0].trim();
-    return verb.replace(/[?.,!]/g, "");
-  }
-  const match = text.match(/\(([^)]+)/);
-  return match ? match[1].trim() : "";
-}
-
-function shuffleArray(array) {
-  return array.slice().sort(() => Math.random() - 0.5);
-}
-
-function generateOptions(correct, distractors) {
-  return shuffleArray([correct, ...distractors.filter(d => d)]);
-}
-
-function speak(text) {
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "fi-FI";
-  speechSynthesis.speak(utterance);
-}
-
-// ============== 首次初始化 ==============
-initializeData();
+  const labels = ["
