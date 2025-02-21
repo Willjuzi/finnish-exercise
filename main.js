@@ -134,6 +134,37 @@ function updateGroupSelector() {
   groupSelector.value = selectedGroup;
 }
 
+// ============== 工具函数 ==============
+function checkAnswer(selected, correct, ttsText) {
+  if (selected === correct) {
+    alert("✅ 正确！");
+  } else {
+    alert(`❌ 正确答案是：${correct}`);
+  }
+  speak(ttsText);
+}
+
+function getVerb(text) {
+  const prefix = "Minkä tyyppinen verbi on ";
+  return text.startsWith(prefix) ? 
+    text.slice(prefix.length).split("(")[0].trim().replace(/[?.,!]/g, "") : 
+    (text.match(/\(([^)]+)/)?.[1]?.trim() || "");
+}
+
+function shuffleArray(array) {
+  return array.slice().sort(() => Math.random() - 0.5);
+}
+
+function generateOptions(correct, distractors) {
+  return shuffleArray([correct, ...distractors.filter(d => d)]);
+}
+
+function speak(text) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "fi-FI";
+  speechSynthesis.speak(utterance);
+}
+
 // ============== 其他核心函数保持不变 ==============
 // ... [保持原有 initializeData、showQuestion、checkAnswer 等函数] ...
 
