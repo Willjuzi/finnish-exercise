@@ -1,172 +1,195 @@
-// main.js
+// ============== 全局变量 ==============
+let currentMode = 'practice'; // 当前模式（practice/vocab）
+let rawQuestions = [];        // 原始练习题库
+let vocabData = [];           // 原始单词数据
+let questions = [];           // 当前题目集合
+let currentQuestionIndex = 0; // 当前题目索引
+let selectedGroup = 1;        // 当前选中组数
+let verbOptionsDict = {};     // 动词选项字典
 
-let rawQuestions = [];
-let questions = [];
-let currentQuestionIndex = 0;
-let selectedGroup = 1;
-let verbOptionsDict = {};  // 用于保存每个动词对应的选项数组
+// API 配置
+const API_CONFIG = {
+  practice: "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv",
+  vocab: "https://docs.google.com/spreadsheets/d/1VD4SYUVH5An14uS8cxzGlREbRx2eL6SeWUMBpNWp9ZQ/export?format=csv"
+};
 
-// 修改后的 getVerb 函数
-// 注意前缀后加一个空格，确保正确提取动词
-function getVerb(text) {
-  const prefix = "Minkä tyyppinen verbi on ";
-  if (text.startsWith(prefix)) {
-    let remainder = text.substring(prefix.length).trim();
-    let parenIndex = remainder.indexOf("(");
-    if (parenIndex !== -1) {
-      remainder = remainder.substring(0, parenIndex).trim();
-    }
-    remainder = remainder.replace(/[?.,!]/g, "").trim();
-    return remainder;
-  }
-  // 如果不以该前缀开头，则尝试从第一个括号中提取
-  let match = text.match(/\(([^)]+)\)/);
-  return match ? match[1].trim() : "";
+// ============== 初始化 ==============
+document.getElementById('mode-selector').addEventListener('change', function(e) {
+  currentMode = e.target.value;
+  initializeData();
+});
+
+document.getElementById('group-selector').addEventListener('change', function(e) {
+  selectedGroup = parseInt(e.target.value);
+  updateQuestionSet();
+  showQuestion();
+});
+
+document.getElementById('next-btn').addEventListener('click', () => {
+  currentQuestionIndex++;
+  showQuestion();
+});
+
+// ============== 核心函数 ==============
+function initializeData() {
+  const apiUrl = API_CONFIG[currentMode];
+  
+  fetch(apiUrl)
+    .then(response => response.text())
+    .then(csvText => {
+      if (currentMode === 'practice') {
+        handlePracticeData(csvText);
+      } else {
+        handleVocabData(csvText);
+      }
+    })
+    .catch(error => console.error("数据加载失败:", error));
 }
 
-const sheetURL = "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/gviz/tq?tqx=out:csv";
+// 处理练习题数据
+function handlePracticeData(csvText) {
+  const results = Papa.parse(csvText, {
+    header: true,
+    skipEmptyLines: true
+  });
 
-fetch(sheetURL)
-  .then(response => response.text())
-  .then(csvText => {
-    console.log("【Debug】CSV 原始数据：", csvText);
-    const results = Papa.parse(csvText, {
-      header: true,
-      skipEmptyLines: true
-    });
-    console.log("【Debug】PapaParse 解析结果：", results);
-    if (results.data && results.data.length > 0) {
-      console.log("【Debug】数据项键值：", Object.keys(results.data[0]));
+  rawQuestions = results.data.map(row => ({
+    question: row["Question"]?.trim() || "",
+    correct: row["Correct Answer"]?.trim() || "",
+    distractors: [
+      row["Distractor 1"]?.trim() || "",
+      row["Distractor 2"]?.trim() || "",
+      row["Distractor 3"]?.trim() || ""
+    ],
+    group: parseFloat(row["Group"])
+  }));
+
+  // 建立动词选项字典
+  rawQuestions.forEach(row => {
+    if (row.correct) {
+      let verb = getVerb(row.question);
+      if (verb) verbOptionsDict[verb] = [row.correct, ...row.distractors];
     }
-    // 映射数据：去除两端空格
-    rawQuestions = results.data.map(row => {
-      const question = row["Question"] ? row["Question"].trim() : "";
-      const correct = row["Correct Answer"] ? row["Correct Answer"].trim() : "";
-      const distractor1 = row["Distractor 1"] ? row["Distractor 1"].trim() : "";
-      const distractor2 = row["Distractor 2"] ? row["Distractor 2"].trim() : "";
-      const distractor3 = row["Distractor 3"] ? row["Distractor 3"].trim() : "";
-      const group = parseFloat(row["Group"]);
-      
-      const mapped = {
-        question: question,
-        correct: correct,
-        distractors: [distractor1, distractor2, distractor3],
-        group: group
-      };
-      console.log("【Debug】映射行：", JSON.stringify(mapped));
-      return mapped;
-    });
-    
-    // 建立动词与选项的字典：仅对那些"Correct Answer"有内容的行建立映射
-    rawQuestions.forEach(row => {
-      if (row.correct && row.correct.length > 0) {
-        let verb = getVerb(row.question);
-        if (verb) {
-          verbOptionsDict[verb] = [row.correct, ...row.distractors];
-        }
-      }
-    });
-    console.log("【Debug】Verb Options Dictionary:", JSON.stringify(verbOptionsDict));
-    
-    updateGroupSelector();
-    updateQuestionSet();
-    // 不再过滤掉选项为空的题目——通过字典补全后，应该都有选项
-    showQuestion();
-  })
-  .catch(error => console.error("Error loading quiz data:", error));
+  });
 
+  updateGroupSelector();
+  updateQuestionSet();
+  showQuestion();
+}
+
+// 处理背单词数据
+function handleVocabData(csvText) {
+  const results = Papa.parse(csvText, {
+    header: true,
+    skipEmptyLines: true
+  });
+
+  vocabData = results.data.map(row => ({
+    word: row["单词"]?.trim() || "",
+    definition: row["释义"]?.trim() || "",
+    example: row["例句"]?.trim() || "",
+    group: parseInt(row["组别"]) || 1
+  }));
+
+  updateGroupSelector();
+  updateQuestionSet();
+  showQuestion();
+}
+
+// ============== 功能函数 ==============
 function updateGroupSelector() {
   const groupSelector = document.getElementById("group-selector");
   groupSelector.innerHTML = "";
-  let uniqueGroups = [...new Set(rawQuestions.map(q => q.group))];
-  uniqueGroups.sort((a, b) => a - b);
-  uniqueGroups.forEach(groupNum => {
-    let option = document.createElement("option");
-    option.value = groupNum;
-    option.textContent = `Group ${groupNum}`;
+  
+  // 获取当前模式下的所有组别
+  let groups = currentMode === 'practice' 
+    ? [...new Set(rawQuestions.map(q => q.group))]
+    : [...new Set(vocabData.map(word => word.group))];
+  
+  // 生成选项
+  groups.sort((a, b) => a - b).forEach(group => {
+    const option = document.createElement("option");
+    option.value = group;
+    option.textContent = `Group ${group}`;
     groupSelector.appendChild(option);
   });
-  groupSelector.addEventListener("change", event => {
-    selectedGroup = parseFloat(event.target.value);
-    updateQuestionSet();
-    showQuestion();
-  });
-  if (uniqueGroups.length > 0) {
-    selectedGroup = uniqueGroups[0];
-    updateQuestionSet();
-  }
+
+  // 设置默认选中组
+  selectedGroup = groups[0] || 1;
+  groupSelector.value = selectedGroup;
 }
 
 function updateQuestionSet() {
-  let filteredQuestions = rawQuestions.filter(q => q.group === selectedGroup);
-  filteredQuestions = shuffleArray(filteredQuestions);
-  // 生成每道题目的多项选择题
-  questions = filteredQuestions.map(q => {
-    let options = [];
-    let answer = q.correct;
-    if (q.correct && q.correct.length > 0) {
-      // 本行已有正确答案（通常为数字题）
-      options = generateOptions(q.correct, q.distractors);
-    } else {
-      // 本行答案为空（即单词题），尝试通过字典补全
-      let verb = getVerb(q.question);
-      if (verb && verbOptionsDict[verb]) {
-        options = generateOptions(verbOptionsDict[verb][0], verbOptionsDict[verb].slice(1));
-        answer = verbOptionsDict[verb][0];
-      } else {
-        // 如果找不到，则保留空数组（理论上不应出现）
-        options = [];
-      }
-    }
-    return {
-      question: q.question,
-      options: options,
-      answer: answer,
-      ttsText: answer
-    };
-  });
-  questions = shuffleArray(questions);
+  if (currentMode === 'practice') {
+    // 练习模式：过滤当前组 + 随机排序
+    let filtered = rawQuestions
+      .filter(q => q.group === selectedGroup)
+      .map(q => ({
+        question: q.question,
+        options: generateOptions(q.correct, q.distractors),
+        answer: q.correct,
+        ttsText: getVerb(q.question)
+      }));
+    questions = shuffleArray(filtered);
+  } else {
+    // 背单词模式：过滤当前组 + 生成选项
+    let filtered = vocabData
+      .filter(word => word.group === selectedGroup)
+      .map(word => ({
+        type: 'vocab',
+        word: word.word,
+        options: generateVocabOptions(word),
+        answer: word.definition,
+        ttsText: word.word
+      }));
+    questions = shuffleArray(filtered);
+  }
   currentQuestionIndex = 0;
 }
 
-function generateOptions(correct, distractors) {
-  let options = [correct, ...distractors];
-  return shuffleArray(options);
+// 生成背单词选项（正确释义 + 3个同组干扰项）
+function generateVocabOptions(correctWord) {
+  const sameGroupWords = vocabData.filter(word => 
+    word.group === selectedGroup && 
+    word.word !== correctWord.word
+  );
+  
+  const distractors = shuffleArray(sameGroupWords)
+    .slice(0, 3)
+    .map(word => word.definition);
+
+  return shuffleArray([correctWord.definition, ...distractors]);
 }
 
-function shuffleArray(array) {
-  let newArray = array.slice();
-  for (let i = newArray.length - 1; i > 0; i--) {
-    let j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
-}
-
+// ============== 界面相关 ==============
 function showQuestion() {
   const container = document.getElementById("question-container");
   container.innerHTML = "";
-  
+
+  // 全部完成提示
   if (currentQuestionIndex >= questions.length) {
-    alert("🎉 Practice complete! You have finished all questions in this group!");
+    const msg = currentMode === 'practice' 
+      ? "🎉 练习完成！本组题目已全部完成！"
+      : "🎉 恭喜！本组单词已全部复习！";
+    container.innerHTML = `<h2 style="color: #4CAF50;">${msg}</h2>`;
     return;
   }
-  
+
   const current = questions[currentQuestionIndex];
-  console.log("【Debug】当前题目数据：", JSON.stringify(current));
   
-  // 显示题目文本
+  // 显示问题
   const questionElem = document.createElement("h2");
   questionElem.className = "question-text";
-  questionElem.textContent = current.question;
+  questionElem.textContent = currentMode === 'practice' 
+    ? current.question 
+    : `单词：${current.word}`;
   container.appendChild(questionElem);
-  
-  // 显示多项选择题选项（标签依次为 A、B、C、D、E）
-  const labels = ["A", "B", "C", "D", "E"];
+
+  // 生成选项按钮
+  const labels = ["A", "B", "C", "D"];
   current.options.forEach((option, index) => {
     const btn = document.createElement("button");
     btn.className = "option-btn";
-    btn.dataset.value = option;
     btn.textContent = `${labels[index]}. ${option}`;
     btn.onclick = () => checkAnswer(option, current.answer, current.ttsText);
     container.appendChild(btn);
@@ -175,33 +198,37 @@ function showQuestion() {
 
 function checkAnswer(selected, correct, ttsText) {
   if (selected === correct) {
-    alert("🎉 Congratulations! You got it right! Keep going! 🚀");
+    alert("✅ 正确！正确答案是：" + correct);
   } else {
-    alert(`❌ Oops! Try again! The correct answer is: ${correct} 😉`);
+    alert(`❌ 错误！正确答案是：${correct}`);
   }
   speak(ttsText);
+}
+
+// ============== 工具函数 ==============
+function getVerb(text) {
+  const prefix = "Minkä tyyppinen verbi on ";
+  if (text.startsWith(prefix)) {
+    let verb = text.slice(prefix.length).split("(")[0].trim();
+    return verb.replace(/[?.,!]/g, "");
+  }
+  const match = text.match(/\(([^)]+)/);
+  return match ? match[1].trim() : "";
+}
+
+function shuffleArray(array) {
+  return array.slice().sort(() => Math.random() - 0.5);
+}
+
+function generateOptions(correct, distractors) {
+  return shuffleArray([correct, ...distractors.filter(d => d)]);
 }
 
 function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "fi-FI";
-  const voices = speechSynthesis.getVoices();
-  const finnishVoice = voices.find(voice => voice.lang.toLowerCase().includes("fi"));
-  if (finnishVoice) {
-    utterance.voice = finnishVoice;
-    speechSynthesis.speak(utterance);
-  } else {
-    let audio = new Audio(`https://translate.google.com/translate_tts?ie=UTF-8&tl=fi&client=tw-ob&q=${encodeURIComponent(text)}`);
-    audio.oncanplaythrough = () => {
-      audio.play().catch(error => console.error("Audio play failed:", error));
-    };
-    audio.onerror = () => {
-      console.error("Error loading the TTS audio.");
-    };
-  }
+  speechSynthesis.speak(utterance);
 }
 
-document.getElementById("next-btn").addEventListener("click", () => {
-  currentQuestionIndex++;
-  showQuestion();
-});
+// ============== 首次初始化 ==============
+initializeData();
