@@ -7,7 +7,7 @@ let currentQuestionIndex = 0;
 let selectedGroup = 1;
 let verbOptionsDict = {};
 
-// API 配置（已验证可访问性）
+// API 配置（请确保表格已公开）
 const API_CONFIG = {
   practice: "https://docs.google.com/spreadsheets/d/1_3YwljVW1L0v-lQkL0qQUls5E1amPSTmpQGCSVEHj6E/export?format=csv",
   vocab: "https://docs.google.com/spreadsheets/d/1VD4SYUVH5An14uS8cxzGlREbRx2eL6SeWUMBpNWp9ZQ/export?format=csv"
@@ -21,9 +21,7 @@ function initializeEventListeners() {
   });
 
   document.getElementById('group-selector').addEventListener('change', function(e) {
-    selectedGroup = currentMode === 'practice' ? 
-      parseFloat(e.target.value) : 
-      parseInt(e.target.value);
+    selectedGroup = parseFloat(e.target.value);
     updateQuestionSet();
     showQuestion();
   });
@@ -83,7 +81,7 @@ function handlePracticeData(csvText) {
     }));
 
     updateGroupSelector();
-    updateQuestionSet(); // 确保在数据加载后调用
+    updateQuestionSet();
     showQuestion();
   } catch (error) {
     console.error("练习数据处理失败:", error);
@@ -91,7 +89,75 @@ function handlePracticeData(csvText) {
   }
 }
 
-// ============== 关键函数定义 ==============
+// ============== 背单词模式处理（关键修复） ==============
+function handleVocabData(csvText) {
+  try {
+    const results = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transform: (value, header) => {
+        if (header === "组别") {
+          // 不再限制组别范围，动态显示所有存在的正整数组
+          const num = parseInt(value) || 1;
+          return Math.abs(num); // 处理负数组别
+        }
+        return value?.trim() || "";
+      }
+    });
+
+    vocabData = results.data
+      .filter(row => row["单词"]?.trim()) // 过滤空行
+      .map(row => ({
+        word: row["单词"]?.trim(),
+        definition: row["释义"]?.trim(),
+        example: row["例句"]?.trim(),
+        group: row["组别"]
+      }));
+
+    console.log("背单词原始数据（调试）：", vocabData);
+    updateGroupSelector();
+    updateQuestionSet();
+    showQuestion();
+  } catch (error) {
+    console.error("背单词数据处理失败:", error);
+    showError("单词数据格式错误");
+  }
+}
+
+// ============== 分组选择器修复 ==============
+function updateGroupSelector() {
+  const groupSelector = document.getElementById("group-selector");
+  groupSelector.innerHTML = "";
+
+  // 获取有效分组
+  let groups = [];
+  if (currentMode === 'practice') {
+    groups = [...new Set(rawQuestions.map(q => q.group))]
+      .filter(g => !isNaN(g))
+      .sort((a, b) => a - b);
+  } else {
+    // 动态获取所有存在的正整数组别
+    groups = [...new Set(vocabData.map(word => word.group))]
+      .filter(g => Number.isInteger(g) && g > 0)
+      .sort((a, b) => a - b);
+  }
+
+  // 生成选项（至少保证一个默认选项）
+  if (groups.length === 0) groups.push(1);
+
+  groups.forEach(group => {
+    const option = document.createElement("option");
+    option.value = group;
+    option.textContent = `Group ${group}`;
+    groupSelector.appendChild(option);
+  });
+
+  // 设置默认选中组
+  selectedGroup = groups.includes(1) ? 1 : groups[0];
+  groupSelector.value = selectedGroup;
+}
+
+// ============== 题目集合更新（关键修复） ==============
 function updateQuestionSet() {
   if (currentMode === 'practice') {
     let filtered = rawQuestions
@@ -104,8 +170,9 @@ function updateQuestionSet() {
       }));
     questions = shuffleArray(filtered);
   } else {
+    // 严格过滤当前组别单词
     let filtered = vocabData
-      .filter(word => word.group === selectedGroup)
+      .filter(word => word.group === selectedGroup && word.word) // 确保单词字段不为空
       .map(word => ({
         type: 'vocab',
         word: word.word,
@@ -114,9 +181,15 @@ function updateQuestionSet() {
         ttsText: word.word
       }));
     questions = shuffleArray(filtered);
+    
+    // 调试输出
+    console.log(`当前组别：Group ${selectedGroup}，单词数量：${filtered.length}`);
   }
   currentQuestionIndex = 0;
 }
+
+// ============== 其他核心函数保持不变 ==============
+// ... [包括 generateVocabOptions, showQuestion, checkAnswer 等] ...
 
 // ============== 初始化执行 ==============
 initializeEventListeners();
