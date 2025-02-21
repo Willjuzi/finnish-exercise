@@ -96,7 +96,7 @@ function handleVocabData(csvText) {
       skipEmptyLines: true,
       transform: (value, header) => {
         // 列名已调整为英文
-        if (header === "group") {
+        if (header === "Group") {
           const num = parseInt(value) || 1;
           return Math.abs(num); // 处理负数组别
         }
@@ -107,15 +107,21 @@ function handleVocabData(csvText) {
     console.log("原始数据（调试）:", results.data);
 
     vocabData = results.data
-      .filter(row => row["word"]?.trim()) // 使用英文列名 "word"
+      .filter(row => row["word"]?.trim() && row["Definition"]?.trim()) // 使用英文列名 "word" 和 "Definition"
       .map(row => ({
         word: row["word"],
         definition: row["Definition"], // 使用英文列名 "Definition"
-        example: row["example"] || "", // 示例列为可选
-        group: row["group"]
+        group: row["Group"]
       }));
 
-    console.log("背单词数据（调试）:", vocabData);
+    console.log("过滤后的数据（调试）:", vocabData.filter(word => word.word && word.definition));
+
+    if (vocabData.length === 0) {
+      console.error("词汇数据为空或格式不正确");
+      showError("词汇数据为空或格式不正确");
+      return;
+    }
+
     updateGroupSelector();
     updateQuestionSet();
     showQuestion();
