@@ -12,6 +12,10 @@ const API_CONFIG = {
   vocab: "https://docs.google.com/spreadsheets/d/1VD4SYUVH5An14uS8cxzGlREbRx2eL6SeWUMBpNWp9ZQ/export?format=csv"
 };
 
+// 缓存配置
+const CACHE_KEY_PREFIX = "learning_app_data_";
+const CACHE_DURATION = 60 * 60 * 1000; // 1小时
+
 // ============== 初始化事件监听 ==============
 function initializeEventListeners() {
   document.getElementById('mode-selector').addEventListener('change', function(e) {
@@ -32,25 +36,36 @@ function initializeEventListeners() {
 }
 
 // ============== 数据初始化 ==============
-function initializeData() {
-  const apiUrl = API_CONFIG[currentMode];
-  
-  fetch(apiUrl)
-    .then(response => {
+async function initializeData() {
+  const cachedData = getCachedData(currentMode);
+  if (cachedData) {
+    console.log(`使用缓存数据 (${currentMode})`);
+    if (currentMode === 'practice') {
+      handlePracticeData(cachedData);
+    } else {
+      handleVocabData(cachedData);
+    }
+  } else {
+    console.log(`未找到缓存数据 (${currentMode})，正在请求新数据...`);
+    const apiUrl = API_CONFIG[currentMode];
+    
+    try {
+      const response = await fetch(apiUrl);
       if (!response.ok) throw new Error(`HTTP错误! 状态码: ${response.status}`);
-      return response.text();
-    })
-    .then(csvText => {
+      const csvText = await response.text();
+      
       if (currentMode === 'practice') {
         handlePracticeData(csvText);
       } else {
         handleVocabData(csvText);
       }
-    })
-    .catch(error => {
+      
+      cacheData(currentMode, csvText);
+    } catch (error) {
       console.error("数据加载失败:", error);
       showError("⚠️ 数据加载失败，请检查：<br>1. 表格是否已公开共享<br>2. 网络连接是否正常");
-    });
+    }
+  }
 }
 
 // ============== 错误处理 ==============
@@ -288,6 +303,30 @@ function getFinnishVoice() {
     }
   }
   return null; // 如果没有找到合适的语音，则返回 null
+}
+
+// ============== 缓存管理 ==============
+function getCachedData(mode) {
+  const key = `${CACHE_KEY_PREFIX}${mode}`;
+  const item = localStorage.getItem(key);
+  if (!item) return null;
+  
+  const data = JSON.parse(item);
+  const now = Date.now();
+  
+  if (now - data.timestamp < CACHE_DURATION) {
+    return data.csvText;
+  } else {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function cacheData(mode, csvText) {
+  const key = `${CACHE_KEY_PREFIX}${mode}`;
+  const now = Date.now();
+  const data = { timestamp: now, csvText };
+  localStorage.setItem(key, JSON.stringify(data));
 }
 
 // ============== 初始化执行 ==============
